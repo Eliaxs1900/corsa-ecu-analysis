@@ -151,6 +151,14 @@ public final class App {
                 List<Integer> data = sesionKwp().datosLocales(Integer.parseInt(partes[1], 16));
                 System.out.println("  " + hex(data));
             }
+            case "o21w" -> {
+                if (!requiereAdaptador()) break;
+                String[] a = partes.length > 1 ? partes[1].split("\\s+") : new String[0];
+                if (a.length == 0) { System.out.println("Uso: o21w <id hex> [muestras=6] [segundos=15]"); break; }
+                vigilarDatos(Integer.parseInt(a[0], 16),
+                        a.length > 1 ? Integer.parseInt(a[1]) : 6,
+                        a.length > 2 ? Integer.parseInt(a[2]) : 15);
+            }
             case "kwp" -> {
                 if (!requiereAdaptador()) break;
                 if (partes.length < 2) { System.out.println("Uso: kwp 18 00 FF 00"); break; }
@@ -236,6 +244,52 @@ public final class App {
                 System.out.printf("  %-32s [error] %s%n", pid.getValue() + ":", e.getMessage());
             }
         }
+    }
+
+    /**
+     * Muestrea el bloque 21 <id> varias veces y enseña qué offsets cambian:
+     * la forma empírica de mapear campos sin documentación (temperaturas al
+     * enfriarse el motor, rpm al acelerar, etc.).
+     */
+    private void vigilarDatos(int id, int muestras, int segundos) throws IOException {
+        List<List<Integer>> capturas = new java.util.ArrayList<>();
+        System.out.printf("Muestreando 21 %02X: %d capturas cada %d s...%n", id, muestras, segundos);
+        for (int i = 0; i < muestras; i++) {
+            List<Integer> data = sesionKwp().datosLocales(id);
+            capturas.add(data.subList(2, data.size())); // sin el prefijo 61 <id>
+            System.out.printf("  captura %d/%d (%d bytes)%n", i + 1, muestras, data.size() - 2);
+            if (i < muestras - 1) {
+                try { Thread.sleep(segundos * 1000L); } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+        List<Integer> primera = capturas.get(0);
+        System.out.println("Primera captura (offset: valor):");
+        for (int i = 0; i < primera.size(); i += 16) {
+            StringBuilder sb = new StringBuilder(String.format("  %02d:", i));
+            for (int j = i; j < Math.min(i + 16, primera.size()); j++) {
+                sb.append(String.format(" %02X", primera.get(j)));
+            }
+            System.out.println(sb);
+        }
+        System.out.println("Offsets que cambian entre capturas:");
+        boolean alguno = false;
+        for (int off = 0; off < primera.size(); off++) {
+            StringBuilder serie = new StringBuilder();
+            boolean cambia = false;
+            for (List<Integer> c : capturas) {
+                int v = off < c.size() ? c.get(off) : -1;
+                serie.append(String.format("%02X ", v));
+                if (v != primera.get(off)) cambia = true;
+            }
+            if (cambia) {
+                alguno = true;
+                System.out.printf("  offset %02d: %s%n", off, serie.toString().trim());
+            }
+        }
+        if (!alguno) System.out.println("  (ninguno: el bloque está completamente estático)");
     }
 
     private Kwp sesionKwp() {
