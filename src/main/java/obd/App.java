@@ -22,6 +22,7 @@ import java.util.Map;
 public final class App {
 
     private Elm327 elm;
+    private Kwp kwp;
 
     public static void main(String[] args) throws Exception {
         prepararDllNativa();
@@ -58,7 +59,9 @@ public final class App {
 
     private void ejecutar(String puertoInicial) throws Exception {
         System.out.println("== corsa-obd-tools :: consola ELM327 ==");
-        System.out.println("Comandos: ports | open <COMx> | probe | dtc | clear | live | trace on|off | quit");
+        System.out.println("Comandos EOBD:  ports | open <COMx> | probe | dtc | clear | live");
+        System.out.println("Comandos Opel:  opel | oid | odtc | oclear si | o21 <id> | kwp <hex...>");
+        System.out.println("Otros:          trace on|off | quit");
         System.out.println("Cualquier otra entrada se envía tal cual al adaptador (AT... o peticiones hex).");
 
         if (puertoInicial != null) abrirPuerto(puertoInicial);
@@ -100,6 +103,62 @@ public final class App {
             case "dtc" -> leerDtc();
             case "clear" -> borrarDtc(partes.length > 1 ? partes[1] : null);
             case "live" -> datosEnVivo();
+            case "opel" -> {
+                if (requiereAdaptador()) {
+                    sesionKwp().init();
+                    System.out.println("Sesión KWP2000 abierta con la ECU del motor (0x11).");
+                    System.out.println("VIN: " + sesionKwp().identificacion(0x90));
+                }
+            }
+            case "oid" -> {
+                if (requiereAdaptador()) {
+                    int[] opciones = {0x90, 0x91, 0x92, 0x94, 0x95, 0x97, 0x98, 0x9A};
+                    for (int op : opciones) {
+                        try {
+                            System.out.printf("  1A %02X: %s%n", op, sesionKwp().identificacion(op));
+                        } catch (IOException e) {
+                            System.out.printf("  1A %02X: [%s]%n", op, e.getMessage());
+                        }
+                    }
+                }
+            }
+            case "odtc" -> {
+                if (requiereAdaptador()) {
+                    List<Kwp.Dtc> dtcs = sesionKwp().leerDtc();
+                    if (dtcs.isEmpty()) {
+                        System.out.println("La ECU no informa de ningún DTC. Motor limpio.");
+                    } else {
+                        for (Kwp.Dtc d : dtcs) {
+                            System.out.printf("  %s  estado=%02X%s%n", d.codigo(), d.estado(),
+                                    d.activo() ? "  [ACTIVO]" : "");
+                        }
+                    }
+                }
+            }
+            case "oclear" -> {
+                if (!requiereAdaptador()) break;
+                if (partes.length > 1 && partes[1].equalsIgnoreCase("si")) {
+                    System.out.println(sesionKwp().borrarDtc()
+                            ? "DTCs borrados por la ECU (respuesta 54)."
+                            : "La ECU no confirmó el borrado.");
+                } else {
+                    System.out.println("Borra los DTC de la ECU del motor. Escribe 'oclear si' para confirmar.");
+                }
+            }
+            case "o21" -> {
+                if (!requiereAdaptador()) break;
+                if (partes.length < 2) { System.out.println("Uso: o21 <id hex>, p. ej. o21 01"); break; }
+                List<Integer> data = sesionKwp().datosLocales(Integer.parseInt(partes[1], 16));
+                System.out.println("  " + hex(data));
+            }
+            case "kwp" -> {
+                if (!requiereAdaptador()) break;
+                if (partes.length < 2) { System.out.println("Uso: kwp 18 00 FF 00"); break; }
+                String[] tokens = partes[1].trim().split("\\s+");
+                int[] datos = new int[tokens.length];
+                for (int i = 0; i < tokens.length; i++) datos[i] = Integer.parseInt(tokens[i], 16);
+                System.out.println("  " + hex(sesionKwp().peticion(datos)));
+            }
             case "trace" -> {
                 boolean on = partes.length > 1 && partes[1].equalsIgnoreCase("on");
                 conAdaptador(e -> e.setTraza(on));
@@ -128,6 +187,7 @@ public final class App {
     private void abrirPuerto(String nombre) throws IOException {
         if (elm != null) elm.close();
         elm = Elm327.abrir(nombre);
+        kwp = null; // la sesión KWP anterior muere con el puerto
         System.out.println("Puerto " + nombre + " abierto. Identificando adaptador...");
         String id = Sonda.inicializarAdaptador(elm);
         System.out.println("Adaptador: " + id);
@@ -176,6 +236,17 @@ public final class App {
                 System.out.printf("  %-32s [error] %s%n", pid.getValue() + ":", e.getMessage());
             }
         }
+    }
+
+    private Kwp sesionKwp() {
+        if (kwp == null) kwp = new Kwp(elm);
+        return kwp;
+    }
+
+    private static String hex(List<Integer> bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (int b : bytes) sb.append(String.format("%02X ", b));
+        return sb.toString().trim();
     }
 
     private boolean requiereAdaptador() {
