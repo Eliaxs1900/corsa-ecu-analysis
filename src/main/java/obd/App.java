@@ -198,6 +198,14 @@ public final class App {
                         a.length > 1 ? Integer.parseInt(a[1]) : 6,
                         a.length > 2 ? Integer.parseInt(a[2]) : 15);
             }
+            case "olog" -> {
+                if (!requiereAdaptador()) break;
+                String[] a = partes.length > 1 ? partes[1].split("\\s+") : new String[0];
+                if (a.length == 0) { System.out.println("Uso: olog <id hex> [duracion_s=300] [intervalo_ms=400]"); break; }
+                registrarCsv(Integer.parseInt(a[0], 16),
+                        a.length > 1 ? Integer.parseInt(a[1]) : 300,
+                        a.length > 2 ? Long.parseLong(a[2]) : 400);
+            }
             case "kwp" -> {
                 if (!requiereAdaptador()) break;
                 if (partes.length < 2) { System.out.println("Uso: kwp 18 00 FF 00"); break; }
@@ -342,6 +350,58 @@ public final class App {
             }
         }
         if (!alguno) System.out.println("  (ninguno: el bloque está completamente estático)");
+    }
+
+    /**
+     * Registro continuo del bloque 21 <id> a CSV (para sesiones en marcha):
+     * una línea por muestra con timestamp, apto para correlar con maniobras
+     * a posteriori. Aguanta caídas de sesión (re-init) y anota los huecos.
+     */
+    private void registrarCsv(int id, int duracionS, long intervaloMs) throws IOException {
+        java.nio.file.Path dir = java.nio.file.Path.of("logs");
+        java.nio.file.Files.createDirectories(dir);
+        String nombre = String.format("olog-%02X-%s.csv", id,
+                java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")));
+        java.nio.file.Path fichero = dir.resolve(nombre);
+        long fin = System.currentTimeMillis() + duracionS * 1000L;
+        int muestras = 0, fallos = 0;
+        System.out.printf("Registrando 21 %02X en %s durante %d s (Ctrl+C corta la consola entera; mejor deja agotar)...%n",
+                id, fichero, duracionS);
+        try (java.io.PrintWriter out = new java.io.PrintWriter(java.nio.file.Files.newBufferedWriter(fichero))) {
+            out.println("t_ms,hora,datos_hex");
+            long ultimoAviso = System.currentTimeMillis();
+            while (System.currentTimeMillis() < fin) {
+                long t0 = System.currentTimeMillis();
+                try {
+                    List<Integer> data = sesionKwp().datosLocales(id);
+                    out.printf("%d,%s,%s%n", t0,
+                            java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS")),
+                            hex(data.subList(2, data.size())));
+                    out.flush();
+                    muestras++;
+                } catch (IOException e) {
+                    fallos++;
+                    out.printf("%d,%s,ERROR %s%n", t0,
+                            java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS")),
+                            e.getMessage().replace(',', ';'));
+                    out.flush();
+                    try { sesionKwp().init(); } catch (IOException e2) { /* reintentará */ }
+                }
+                if (System.currentTimeMillis() - ultimoAviso >= 30_000) {
+                    System.out.printf("  ...%d muestras (%d fallos), quedan %d s%n",
+                            muestras, fallos, (fin - System.currentTimeMillis()) / 1000);
+                    ultimoAviso = System.currentTimeMillis();
+                }
+                long resto = intervaloMs - (System.currentTimeMillis() - t0);
+                if (resto > 0) {
+                    try { Thread.sleep(resto); } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+        }
+        System.out.printf("Registro terminado: %d muestras, %d fallos → %s%n", muestras, fallos, fichero);
     }
 
     private Kwp sesionKwp() {

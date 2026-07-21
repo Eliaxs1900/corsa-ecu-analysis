@@ -31,6 +31,7 @@ public final class Kwp {
 
     private final Elm327 elm;
     private boolean inicializado;
+    private String ultimaCabecera;
 
     public Kwp(Elm327 elm) {
         this(elm, ECU_MOTOR);
@@ -50,6 +51,7 @@ public final class Kwp {
         if (!r.toUpperCase().contains("OK")) {
             throw new IOException("Init rápido KWP fallido: " + r.replace('\n', ' '));
         }
+        ultimaCabecera = String.format("81 %02X %02X", ecu, TESTER);
         inicializado = true;
     }
 
@@ -60,7 +62,13 @@ public final class Kwp {
      */
     public List<Integer> peticion(int... datos) throws IOException {
         if (!inicializado) init();
-        elm.send(String.format("ATSH %02X %02X %02X", 0x80 | datos.length, ecu, TESTER));
+        // Reajustar la cabecera solo si cambia la longitud: ahorra un viaje
+        // por petición, clave para la tasa de muestreo del registrador (olog).
+        String cabecera = String.format("%02X %02X %02X", 0x80 | datos.length, ecu, TESTER);
+        if (!cabecera.equals(ultimaCabecera)) {
+            elm.send("ATSH " + cabecera);
+            ultimaCabecera = cabecera;
+        }
         StringBuilder hex = new StringBuilder();
         for (int b : datos) hex.append(String.format("%02X", b));
         String resp = elm.send(hex.toString(), Elm327.TIMEOUT_INIT_MS);
