@@ -255,15 +255,28 @@ public final class App {
         List<List<Integer>> capturas = new java.util.ArrayList<>();
         System.out.printf("Muestreando 21 %02X: %d capturas cada %d s...%n", id, muestras, segundos);
         for (int i = 0; i < muestras; i++) {
-            List<Integer> data = sesionKwp().datosLocales(id);
-            capturas.add(data.subList(2, data.size())); // sin el prefijo 61 <id>
-            System.out.printf("  captura %d/%d (%d bytes)%n", i + 1, muestras, data.size() - 2);
+            try {
+                List<Integer> data = sesionKwp().datosLocales(id);
+                capturas.add(data.subList(2, data.size())); // sin el prefijo 61 <id>
+                System.out.printf("  captura %d/%d (%d bytes)%n", i + 1, muestras, data.size() - 2);
+            } catch (IOException e) {
+                // El arranque del motor hunde la tensión y puede tirar la sesión: reintentar
+                System.out.printf("  captura %d/%d perdida (%s), reintentando init...%n",
+                        i + 1, muestras, e.getMessage());
+                try { sesionKwp().init(); } catch (IOException e2) {
+                    System.out.println("  re-init fallido: " + e2.getMessage());
+                }
+            }
             if (i < muestras - 1) {
                 try { Thread.sleep(segundos * 1000L); } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;
                 }
             }
+        }
+        if (capturas.isEmpty()) {
+            System.out.println("Sin capturas válidas.");
+            return;
         }
         List<Integer> primera = capturas.get(0);
         System.out.println("Primera captura (offset: valor):");
