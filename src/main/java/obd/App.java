@@ -151,6 +151,45 @@ public final class App {
                 List<Integer> data = sesionKwp().datosLocales(Integer.parseInt(partes[1], 16));
                 System.out.println("  " + hex(data));
             }
+            case "oscan" -> {
+                if (!requiereAdaptador()) break;
+                System.out.println("Barriendo 21 00..FF (los ids que respondan):");
+                for (int i = 0; i <= 0xFF; i++) {
+                    try {
+                        List<Integer> data = sesionKwp().datosLocales(i);
+                        System.out.printf("  21 %02X (%d bytes): %s%n", i, data.size() - 2,
+                                hex(data.subList(2, Math.min(data.size(), 26)))
+                                        + (data.size() > 26 ? " ..." : ""));
+                    } catch (IOException e) {
+                        if (e.getMessage() != null && e.getMessage().contains("cayó")) {
+                            System.out.printf("  21 %02X: sesión caída, re-init...%n", i);
+                            try { sesionKwp().init(); } catch (IOException e2) { /* seguirá fallando */ }
+                        }
+                    }
+                }
+                System.out.println("Barrido completado.");
+            }
+            case "ohunt" -> {
+                if (!requiereAdaptador()) break;
+                // Direcciones KWP habituales en Opel de la época: motor, caja, ABS,
+                // airbag, inmovilizador, cuadro, dirección, climatizador, carrocería...
+                int[] direcciones = {0x01, 0x02, 0x10, 0x11, 0x12, 0x13, 0x15, 0x17, 0x18,
+                        0x20, 0x25, 0x28, 0x30, 0x33, 0x40, 0x45, 0x51, 0x58, 0x60, 0x61, 0xA1};
+                System.out.println("Buscando ECUs por K-line (init rápido en cada dirección):");
+                for (int dir : direcciones) {
+                    Kwp k = new Kwp(elm, dir);
+                    try {
+                        k.init();
+                        String id;
+                        try { id = k.identificacion(0x90); } catch (IOException e) { id = "(sin 1A 90)"; }
+                        System.out.printf("  0x%02X: RESPONDE  %s%n", dir, id);
+                    } catch (IOException e) {
+                        System.out.printf("  0x%02X: -%n", dir);
+                    }
+                }
+                kwp = null; // volver a la ECU del motor en el siguiente comando
+                System.out.println("Caza terminada.");
+            }
             case "o21w" -> {
                 if (!requiereAdaptador()) break;
                 String[] a = partes.length > 1 ? partes[1].split("\\s+") : new String[0];

@@ -18,6 +18,8 @@ public final class Kwp {
     public static final int ECU_MOTOR = 0x11;
     public static final int TESTER = 0xF1;
 
+    private final int ecu;
+
     private static final Map<Integer, String> ERRORES_NEGATIVOS = Map.of(
             0x10, "rechazo general",
             0x11, "servicio no soportado",
@@ -31,14 +33,19 @@ public final class Kwp {
     private boolean inicializado;
 
     public Kwp(Elm327 elm) {
+        this(elm, ECU_MOTOR);
+    }
+
+    public Kwp(Elm327 elm, int ecu) {
         this.elm = elm;
+        this.ecu = ecu;
     }
 
     /** Init rápido KWP2000. El ELM327 mantiene la sesión viva con TesterPresent periódicos. */
     public void init() throws IOException {
         elm.send("ATSP 5");
         elm.send("ATH1");
-        elm.send(String.format("ATSH 81 %02X %02X", ECU_MOTOR, TESTER));
+        elm.send(String.format("ATSH 81 %02X %02X", ecu, TESTER));
         String r = elm.send("ATFI", Elm327.TIMEOUT_INIT_MS);
         if (!r.toUpperCase().contains("OK")) {
             throw new IOException("Init rápido KWP fallido: " + r.replace('\n', ' '));
@@ -53,7 +60,7 @@ public final class Kwp {
      */
     public List<Integer> peticion(int... datos) throws IOException {
         if (!inicializado) init();
-        elm.send(String.format("ATSH %02X %02X %02X", 0x80 | datos.length, ECU_MOTOR, TESTER));
+        elm.send(String.format("ATSH %02X %02X %02X", 0x80 | datos.length, ecu, TESTER));
         StringBuilder hex = new StringBuilder();
         for (int b : datos) hex.append(String.format("%02X", b));
         String resp = elm.send(hex.toString(), Elm327.TIMEOUT_INIT_MS);
