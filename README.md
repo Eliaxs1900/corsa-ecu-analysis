@@ -1,6 +1,6 @@
 # corsa-obd-tools
 
-Consola de diagnóstico OBD en Java para un **Opel Corsa C 1.7 diésel (2003)**
+Consola de diagnóstico OBD en Java para un **Opel Corsa C 1.7 DI (Y17DTL, 65 CV, 2003)**
 usando un adaptador **Vgate iCar2 BT3.0** (ELM327 por Bluetooth SPP).
 
 ## Contexto importante

@@ -32,15 +32,18 @@ Según [openecu.org](http://forums.openecu.org/viewtopic.php?f=19&t=832):
   0x10 para gasolina y **0x11 para diésel** ← exactamente nuestro caso.
 - Testers: rango 0xF0–0xFD, típicamente **0xF1** ← el que usamos.
 
-## Hardware del Y17DT (identificado por referencias)
+## Hardware del Y17DTL (identificado por referencias)
 
 - **ECM (ECU del motor): Delphi/Delco 12212819 = Isuzu 8973065750**
   ([auto24parts](https://auto24parts.com/en_GB/p/ECU-ENGINE-CONTROLLER-OPEL-ASTRA-1.7-DT-DTI-Y17DT-Y17DTI-Y17DTL-DELPHI-DELCO-12212819-ISUZU-8973065750/9784)) — no es Denso
   (eso es el Z17DTH posterior).
 - **EDU (módulo de control de la bomba inyectora): Isuzu 8971891360/-61/-62
   = Delphi 16267710** — montado aparte del ECM.
+- Nota de identificación: el coche es el **1.7 DI (Y17DTL, 65 CV)**, no el
+  DTI (Y17DT, 75 CV con intercooler). Misma familia Isuzu; el ECM Delphi y
+  el EDU de las referencias cubren Y17DT/Y17DTI/Y17DTL indistintamente.
 
-### ⚠️ Avería típica conocida del 1.7 DTI: el EDU
+### ⚠️ Avería típica conocida del 1.7 DI/DTI: el EDU
 
 Documentada en [ecutesting](https://www.ecutesting.com/common-faults/vauxhall/vauxhall-17-tdi-ecuedu/),
 [QDI](https://www.qdi-ltd.co.uk/qerauto/astra1.7dtiedu.html) y
