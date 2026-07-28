@@ -32,6 +32,10 @@ public final class Kwp {
     private final Elm327 elm;
     private boolean inicializado;
     private String ultimaCabecera;
+    private String ultimaRespuestaCruda = "";
+
+    /** Respuesta cruda de la última petición (texto ELM327 íntegro: cabecera + datos + checksum). */
+    public String ultimaRespuestaCruda() { return ultimaRespuestaCruda; }
 
     public Kwp(Elm327 elm) {
         this(elm, ECU_MOTOR);
@@ -72,6 +76,7 @@ public final class Kwp {
         StringBuilder hex = new StringBuilder();
         for (int b : datos) hex.append(String.format("%02X", b));
         String resp = elm.send(hex.toString(), Elm327.TIMEOUT_INIT_MS);
+        ultimaRespuestaCruda = resp;
         if (resp.toUpperCase().contains("BUS INIT") && resp.toUpperCase().contains("ERROR")) {
             inicializado = false;
             throw new IOException("La sesión KWP se cayó (BUS INIT ERROR); reintenta con 'opel'");

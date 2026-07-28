@@ -368,22 +368,28 @@ public final class App {
         System.out.printf("Registrando 21 %02X en %s durante %d s (Ctrl+C corta la consola entera; mejor deja agotar)...%n",
                 id, fichero, duracionS);
         try (java.io.PrintWriter out = new java.io.PrintWriter(java.nio.file.Files.newBufferedWriter(fichero))) {
-            out.println("t_ms,hora,datos_hex");
+            // Cabecera enriquecida: además de los datos parseados, se guarda la
+            // RESPUESTA CRUDA íntegra (cabecera KWP + datos + checksum) y la
+            // duración de cada petición, para reanálisis forense y control de calidad.
+            out.println("t_ms,hora,dur_ms,datos_hex,raw_completo");
+            java.time.format.DateTimeFormatter hf =
+                    java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
             long ultimoAviso = System.currentTimeMillis();
             while (System.currentTimeMillis() < fin) {
                 long t0 = System.currentTimeMillis();
                 try {
                     List<Integer> data = sesionKwp().datosLocales(id);
-                    out.printf("%d,%s,%s%n", t0,
-                            java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS")),
-                            hex(data.subList(2, data.size())));
+                    long dur = System.currentTimeMillis() - t0;
+                    String rawFull = sesionKwp().ultimaRespuestaCruda()
+                            .replace("\r", " ").replace("\n", " ").replace(",", ";").trim();
+                    out.printf("%d,%s,%d,%s,%s%n", t0, java.time.LocalTime.now().format(hf),
+                            dur, hex(data.subList(2, data.size())), rawFull);
                     out.flush();
                     muestras++;
                 } catch (IOException e) {
                     fallos++;
-                    out.printf("%d,%s,ERROR %s%n", t0,
-                            java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS")),
-                            e.getMessage().replace(',', ';'));
+                    out.printf("%d,%s,%d,ERROR %s,%n", t0, java.time.LocalTime.now().format(hf),
+                            System.currentTimeMillis() - t0, e.getMessage().replace(',', ';'));
                     out.flush();
                     try { sesionKwp().init(); } catch (IOException e2) { /* reintentará */ }
                 }
