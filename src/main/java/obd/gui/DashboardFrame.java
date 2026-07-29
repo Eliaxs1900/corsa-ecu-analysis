@@ -261,25 +261,31 @@ public class DashboardFrame extends JFrame {
     // ---------- actualización del cuadro ----------
 
     private void update(LiveDecoder.Live l, double hz) {
-        boolean run = l.engineRunning();
-        rpmV.setText(Integer.toString(l.rpm()));
+        boolean pw = l.ecuPowered();            // llave en 2 o motor en marcha => datos válidos
+        boolean map = pw && l.boostKpa() > 0;   // el MAP solo se refresca girando el motor
+        rpmV.setText(pw ? Integer.toString(l.rpm()) : "—");
         rpmV.setForeground(l.rpm() >= 4500 ? DANGER : l.rpm() >= 3000 ? WARN : Color.WHITE);
-        // Aceite y turbo solo son fiables con el motor en marcha.
-        turboV.setText(run ? l.boostKpa() + "  " + String.format("%+.2f", l.boostBar()) : "—");
-        oilV.setText(run ? "≈" + l.intakeApproxC() + "  (" + l.intakeRaw() + ")" : "—");
+        turboV.setText(map ? l.boostKpa() + "  " + String.format("%+.2f", l.boostBar()) : "—");
+        oilV.setText(pw ? "≈" + l.intakeApproxC() + "  (" + l.intakeRaw() + ")" : "—");
         pedalV.setText(Integer.toString(l.pedalPct()));
         coolV.setText(l.coolantC() + "  (obj " + l.coolantTargetC() + ")");
         coolV.setForeground(l.coolantC() >= 105 ? DANGER : l.coolantC() < 60 ? COLD : OK);
         battV.setText(String.format("%.1f", l.voltage()));
 
-        int pct = run ? (int) Math.max(0, Math.min(120, l.boostBar() * 100)) : 0;
+        int pct = map ? (int) Math.max(0, Math.min(120, l.boostBar() * 100)) : 0;
         boostBar.setValue(pct);
-        boostBar.setString(run ? String.format("Turbo  %+.2f bar", l.boostBar()) : "Turbo — (motor parado)");
+        boostBar.setString(map ? String.format("Turbo  %+.2f bar", l.boostBar())
+                : (pw ? "Turbo — (motor parado)" : "ECU sin alimentación"));
 
         setPill(brakeI, l.brake()); setPill(clutchI, l.clutch());
         setPill(acI, l.ac()); setPill(fullI, l.fullLoad());
-        statusLbl.setText(String.format("En vivo · %.1f Hz%s", hz, recording ? " · REC " + recCount : ""));
-        statusLbl.setForeground(OK);
+        if (pw) {
+            statusLbl.setText(String.format("En vivo · %.1f Hz%s", hz, recording ? " · REC " + recCount : ""));
+            statusLbl.setForeground(OK);
+        } else {
+            statusLbl.setText("ECU sin alimentacion (llave en 0) - datos no validos");
+            statusLbl.setForeground(DANGER);
+        }
     }
 
     private void setPill(JLabel p, boolean on) {

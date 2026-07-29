@@ -20,7 +20,9 @@ public final class LiveDecoder {
             int intakeRaw,       // offset 42 en crudo (NTC, escala INVERSA)
             int intakeApproxC,   // ≈ °C estimado con la curva NTC de la propia ECU
             boolean brake, boolean clutch, boolean ac, boolean fullLoad,
-            boolean engineRunning,   // rpm>0: con el motor parado, aceite/turbo/interruptores no son fiables
+            boolean engineRunning,   // rpm > 0
+            /** ECU alimentada (llave en 2 o motor en marcha). Con la llave en 0 reporta 0 V y manda basura. */
+            boolean ecuPowered,
             List<Integer> raw) {}
 
     private LiveDecoder() {}
@@ -36,14 +38,17 @@ public final class LiveDecoder {
         int pedal = Math.min(100, at(b, 55) * 100 / 255);
         int intakeRaw = at(b, 42);
         int intake = ntcToCelsius(intakeRaw);
-        // Con el motor parado (rpm=0) los interruptores traen basura; se enmascaran.
+        // Con la llave en 0 la ECU pierde alimentación (0 V) y manda basura: freno y
+        // embrague salen "pisados". Con la llave en 2 los datos SÍ valen aunque el
+        // motor esté parado, así que se filtra por alimentación, no por rpm.
         boolean running = rpm > 0;
-        boolean brake = running && (at(b, 28) & 0x18) != 0;
-        boolean clutch = running && (at(b, 28) & 0x20) != 0;
-        boolean ac = running && ((at(b, 23) & 0x20) != 0 || (at(b, 26) & 0x02) != 0);
-        boolean full = running && (at(b, 26) & 0x80) != 0;
+        boolean powered = at(b, 30) >= 20;   // ~4,7 V; con contacto real da 46-57
+        boolean brake = powered && (at(b, 28) & 0x18) != 0;
+        boolean clutch = powered && (at(b, 28) & 0x20) != 0;
+        boolean ac = powered && ((at(b, 23) & 0x20) != 0 || (at(b, 26) & 0x02) != 0);
+        boolean full = powered && (at(b, 26) & 0x80) != 0;
         return new Live(rpm, coolant, target, boostKpa, boostBar, voltage, pedal,
-                intakeRaw, intake, brake, clutch, ac, full, running, b);
+                intakeRaw, intake, brake, clutch, ac, full, running, powered, b);
     }
 
     /**
