@@ -21,8 +21,15 @@ propietario de Opel (estilo OP-COM). El comando `probe` recorre esa escalera.
 
 ```
 mvn -q package
-java -jar target/obd-tools.jar [COMx]
+java -jar target/obd-tools.jar
 ```
+
+Al ejecutar el jar se abre la **interfaz gráfica** (Swing): elige el puerto COM,
+pulsa **Conectar** y verás el cuadro de mandos en vivo (rpm, turbo con barra,
+acelerador, refrigerante, temp. aceite, batería + interruptores), igual que la app
+Android. Incluye **grabación a CSV** y lectura de **averías (DTC)** con descripciones.
+
+Para la consola de texto de siempre: `java -jar target/obd-tools.jar console [COMx]`.
 
 ## Comandos de la consola
 

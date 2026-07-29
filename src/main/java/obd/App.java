@@ -26,7 +26,12 @@ public final class App {
 
     public static void main(String[] args) throws Exception {
         prepararDllNativa();
-        new App().ejecutar(args.length > 0 ? args[0] : null);
+        // Por defecto abre la interfaz gráfica; 'console [COMx]' usa la consola de texto.
+        if (args.length > 0 && args[0].equalsIgnoreCase("console")) {
+            new App().ejecutar(args.length > 1 ? args[1] : null);
+        } else {
+            obd.gui.DashboardFrame.launch();
+        }
     }
 
     /**
