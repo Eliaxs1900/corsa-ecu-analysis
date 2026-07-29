@@ -17,7 +17,8 @@ public final class LiveDecoder {
             double boostBar,     // sobrepresión relativa
             double voltage,      // tensión batería (offset 30 x0.234)
             int pedalPct,        // acelerador (offset 55)
-            int oilC,            // temperatura de aceite (offset 42 -40)
+            int intakeRaw,       // offset 42 en crudo (NTC, escala INVERSA)
+            int intakeApproxC,   // ≈ °C estimado con la curva NTC de la propia ECU
             boolean brake, boolean clutch, boolean ac, boolean fullLoad,
             boolean engineRunning,   // rpm>0: con el motor parado, aceite/turbo/interruptores no son fiables
             List<Integer> raw) {}
@@ -33,15 +34,37 @@ public final class LiveDecoder {
         double boostBar = (at(b, 50) - 100) / 100.0;
         double voltage = at(b, 30) * 0.234;
         int pedal = Math.min(100, at(b, 55) * 100 / 255);
-        int oil = at(b, 42) - 40;
+        int intakeRaw = at(b, 42);
+        int intake = ntcToCelsius(intakeRaw);
         // Con el motor parado (rpm=0) los interruptores traen basura; se enmascaran.
         boolean running = rpm > 0;
         boolean brake = running && (at(b, 28) & 0x18) != 0;
         boolean clutch = running && (at(b, 28) & 0x20) != 0;
         boolean ac = running && ((at(b, 23) & 0x20) != 0 || (at(b, 26) & 0x02) != 0);
         boolean full = running && (at(b, 26) & 0x80) != 0;
-        return new Live(rpm, coolant, target, boostKpa, boostBar, voltage, pedal, oil,
-                brake, clutch, ac, full, running, b);
+        return new Live(rpm, coolant, target, boostKpa, boostBar, voltage, pedal,
+                intakeRaw, intake, brake, clutch, ac, full, running, b);
+    }
+
+    /**
+     * Curva del termistor (NTC) de la propia ECU, deducida de la pareja
+     * offset 40 (crudo) ↔ offset 41 (°C linealizados) en un calentamiento
+     * completo. Escala INVERSA: crudo alto = frío. Calibrada de 43 a 87 °C.
+     */
+    private static final int[][] NTC = {
+            {49, 87}, {62, 80}, {75, 75}, {88, 71}, {101, 66}, {114, 63},
+            {127, 60}, {140, 56}, {153, 52}, {166, 49}, {179, 46}, {187, 43}};
+
+    public static int ntcToCelsius(int raw) {
+        if (raw <= NTC[0][0]) return NTC[0][1];
+        if (raw >= NTC[NTC.length - 1][0]) return NTC[NTC.length - 1][1];
+        for (int i = 1; i < NTC.length; i++) {
+            if (NTC[i][0] >= raw) {
+                int r0 = NTC[i - 1][0], t0 = NTC[i - 1][1], r1 = NTC[i][0], t1 = NTC[i][1];
+                return r1 == r0 ? t0 : t0 + (t1 - t0) * (raw - r0) / (r1 - r0);
+            }
+        }
+        return NTC[NTC.length - 1][1];
     }
 
     private static int at(List<Integer> b, int i) {

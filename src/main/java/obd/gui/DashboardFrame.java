@@ -119,7 +119,7 @@ public class DashboardFrame extends JFrame {
         grid.add(gauge("Turbo", turboV, "kPa · bar"));
         grid.add(gauge("Acelerador", pedalV, "%"));
         grid.add(gauge("Refrigerante", coolV, "°C"));
-        grid.add(gauge("Temp. aceite", oilV, "°C"));
+        grid.add(gauge("Admisión", oilV, "≈°C estimado"));
         grid.add(gauge("Batería", battV, "V"));
         wrap.add(grid, BorderLayout.CENTER);
         return wrap;
@@ -266,7 +266,7 @@ public class DashboardFrame extends JFrame {
         rpmV.setForeground(l.rpm() >= 4500 ? DANGER : l.rpm() >= 3000 ? WARN : Color.WHITE);
         // Aceite y turbo solo son fiables con el motor en marcha.
         turboV.setText(run ? l.boostKpa() + "  " + String.format("%+.2f", l.boostBar()) : "—");
-        oilV.setText(run ? Integer.toString(l.oilC()) : "—");
+        oilV.setText(run ? "≈" + l.intakeApproxC() + "  (" + l.intakeRaw() + ")" : "—");
         pedalV.setText(Integer.toString(l.pedalPct()));
         coolV.setText(l.coolantC() + "  (obj " + l.coolantTargetC() + ")");
         coolV.setForeground(l.coolantC() >= 105 ? DANGER : l.coolantC() < 60 ? COLD : OK);
