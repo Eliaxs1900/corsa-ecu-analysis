@@ -1,4 +1,4 @@
-package obd;
+package io.github.eliaxs1900.corsaecuanalysis.desktop;
 
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
@@ -8,6 +8,8 @@ import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 
 import java.io.IOException;
+import io.github.eliaxs1900.corsaecuanalysis.core.Kwp;
+import io.github.eliaxs1900.corsaecuanalysis.core.DtcCatalog;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -30,7 +32,7 @@ public final class App {
         if (args.length > 0 && args[0].equalsIgnoreCase("console")) {
             new App().ejecutar(args.length > 1 ? args[1] : null);
         } else {
-            obd.gui.DashboardFrame.launch();
+            io.github.eliaxs1900.corsaecuanalysis.desktop.gui.DashboardFrame.launch();
         }
     }
 

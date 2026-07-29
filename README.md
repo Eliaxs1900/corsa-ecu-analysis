@@ -1,7 +1,25 @@
-# corsa-obd-tools
+# corsa-ecu-analysis
 
-Consola de diagnóstico OBD en Java para un **Opel Corsa C 1.7 DI (Y17DTL, 65 CV, 2003)**
-usando un adaptador **Vgate iCar2 BT3.0** (ELM327 por Bluetooth SPP).
+Ingeniería inversa y diagnóstico de la ECU de un **Opel Corsa C 1.7 DI (Y17DTL,
+65 CV, 2003)** con un adaptador **Vgate iCar2 BT3.0** (ELM327 por Bluetooth SPP).
+
+Incluye **interfaz gráfica**, consola de texto y todo el trabajo de mapeo del
+bloque de datos en vivo de la ECU ([`docs/mapa-21-01.md`](docs/mapa-21-01.md)),
+hecho a base de experimentos con el coche real.
+
+App móvil hermana: [`corsa-ecu-analysis-android`](https://github.com/Eliaxs1900/corsa-ecu-analysis-android),
+que **comparte el mismo núcleo** (`io.github.eliaxs1900.corsaecuanalysis.core`).
+
+## Estructura
+
+| Paquete | Qué contiene |
+|---|---|
+| `…corsaecuanalysis.core` | **Compartido con Android**: `Transport` (interfaz), `Kwp` (protocolo KWP2000), `LiveDecoder` (mapa de offsets), `DtcCatalog` (averías SAE J2012) |
+| `…corsaecuanalysis.desktop` | `Elm327` (puerto serie), `App` (consola), `Sonda`, `ObdParser` |
+| `…corsaecuanalysis.desktop.gui` | `DashboardFrame`: cuadro de mandos Swing |
+
+`mvn package` genera dos artefactos: el jar ejecutable y
+`corsa-ecu-analysis-core.jar`, que es el que consume la app Android.
 
 ## Contexto importante
 
@@ -21,15 +39,20 @@ propietario de Opel (estilo OP-COM). El comando `probe` recorre esa escalera.
 
 ```
 mvn -q package
-java -jar target/obd-tools.jar
+java -jar target/corsa-ecu-analysis.jar
 ```
 
 Al ejecutar el jar se abre la **interfaz gráfica** (Swing): elige el puerto COM,
 pulsa **Conectar** y verás el cuadro de mandos en vivo (rpm, turbo con barra,
-acelerador, refrigerante, temp. aceite, batería + interruptores), igual que la app
-Android. Incluye **grabación a CSV** y lectura de **averías (DTC)** con descripciones.
+acelerador, refrigerante, admisión, batería e interruptores), igual que la app
+Android. Incluye:
 
-Para la consola de texto de siempre: `java -jar target/obd-tools.jar console [COMx]`.
+- **Grabar CSV** — telemetría con la trama KWP íntegra (cabecera + checksum).
+- **Averías** — lee y decodifica los DTC, con descripciones, y permite borrarlos.
+- **Registros** — consultar el resumen de cada CSV grabado, abrir su carpeta para
+  exportarlo y eliminarlo.
+
+Para la consola de texto de siempre: `java -jar target/corsa-ecu-analysis.jar console [COMx]`.
 
 ## Comandos de la consola
 

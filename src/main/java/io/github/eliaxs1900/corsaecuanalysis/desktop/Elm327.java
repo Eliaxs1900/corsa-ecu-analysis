@@ -1,8 +1,9 @@
-package obd;
+package io.github.eliaxs1900.corsaecuanalysis.desktop;
 
 import com.fazecast.jSerialComm.SerialPort;
 
 import java.io.IOException;
+import io.github.eliaxs1900.corsaecuanalysis.core.Transport;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,7 +13,7 @@ import java.util.List;
  * como puerto COM SPP). Protocolo de texto: comando + CR, respuesta hasta
  * el prompt '>'.
  */
-public final class Elm327 implements AutoCloseable {
+public final class Elm327 implements Transport, AutoCloseable {
 
     /** Timeout por defecto para comandos AT y peticiones OBD ya inicializadas. */
     public static final long TIMEOUT_CMD_MS = 5_000;
@@ -53,6 +54,7 @@ public final class Elm327 implements AutoCloseable {
         this.traza = traza;
     }
 
+    @Override
     public String send(String cmd) throws IOException {
         return send(cmd, TIMEOUT_CMD_MS);
     }
@@ -61,6 +63,7 @@ public final class Elm327 implements AutoCloseable {
      * Envía un comando y acumula la respuesta hasta el prompt '>'.
      * Devuelve el texto limpio (sin eco del comando, sin líneas vacías).
      */
+    @Override
     public String send(String cmd, long timeoutMs) throws IOException {
         if (traza) System.out.println("  >> " + cmd);
         byte[] out = (cmd + "\r").getBytes(StandardCharsets.US_ASCII);

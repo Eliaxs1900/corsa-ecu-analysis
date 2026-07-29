@@ -1,4 +1,4 @@
-package obd;
+package io.github.eliaxs1900.corsaecuanalysis.core;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -29,7 +29,7 @@ public final class Kwp {
             0x33, "acceso de seguridad requerido",
             0x78, "respuesta pendiente (la ECU necesita más tiempo)");
 
-    private final Elm327 elm;
+    private final Transport elm;
     private boolean inicializado;
     private String ultimaCabecera;
     private String ultimaRespuestaCruda = "";
@@ -37,11 +37,11 @@ public final class Kwp {
     /** Respuesta cruda de la última petición (texto ELM327 íntegro: cabecera + datos + checksum). */
     public String ultimaRespuestaCruda() { return ultimaRespuestaCruda; }
 
-    public Kwp(Elm327 elm) {
+    public Kwp(Transport elm) {
         this(elm, ECU_MOTOR);
     }
 
-    public Kwp(Elm327 elm, int ecu) {
+    public Kwp(Transport elm, int ecu) {
         this.elm = elm;
         this.ecu = ecu;
     }
@@ -51,7 +51,7 @@ public final class Kwp {
         elm.send("ATSP 5");
         elm.send("ATH1");
         elm.send(String.format("ATSH 81 %02X %02X", ecu, TESTER));
-        String r = elm.send("ATFI", Elm327.TIMEOUT_INIT_MS);
+        String r = elm.send("ATFI", Transport.TIMEOUT_INIT_MS);
         if (!r.toUpperCase().contains("OK")) {
             throw new IOException("Init rápido KWP fallido: " + r.replace('\n', ' '));
         }
@@ -75,7 +75,7 @@ public final class Kwp {
         }
         StringBuilder hex = new StringBuilder();
         for (int b : datos) hex.append(String.format("%02X", b));
-        String resp = elm.send(hex.toString(), Elm327.TIMEOUT_INIT_MS);
+        String resp = elm.send(hex.toString(), Transport.TIMEOUT_INIT_MS);
         ultimaRespuestaCruda = resp;
         if (resp.toUpperCase().contains("BUS INIT") && resp.toUpperCase().contains("ERROR")) {
             inicializado = false;

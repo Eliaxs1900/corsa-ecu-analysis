@@ -1,12 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>com.eliax.obd</groupId>
-  <artifactId>corsa-obd-tools</artifactId>
+  <groupId>io.github.eliaxs1900</groupId>
+  <artifactId>corsa-ecu-analysis</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <build>
-    <finalName>obd-tools</finalName>
+    <finalName>corsa-ecu-analysis</finalName>
     <plugins>
+      <plugin>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.4.1</version>
+        <executions>
+          <execution>
+            <id>core</id>
+            <phase>package</phase>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+            <configuration>
+              <classifier>core</classifier>
+              <includes>
+                <include>io/github/eliaxs1900/corsaecuanalysis/core/**</include>
+              </includes>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <artifactId>maven-shade-plugin</artifactId>
         <version>3.6.0</version>
@@ -19,7 +38,7 @@
             <configuration>
               <transformers>
                 <transformer>
-                  <mainClass>obd.App</mainClass>
+                  <mainClass>io.github.eliaxs1900.corsaecuanalysis.desktop.App</mainClass>
                   <manifestEntries>
                     <Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
                   </manifestEntries>
@@ -32,7 +51,7 @@
     </plugins>
   </build>
   <properties>
-    <maven.compiler.release>21</maven.compiler.release>
+    <maven.compiler.release>17</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <jline.version>3.26.3</jline.version>
     <jserialcomm.version>2.10.4</jserialcomm.version>

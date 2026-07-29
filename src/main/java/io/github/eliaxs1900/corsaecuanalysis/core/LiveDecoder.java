@@ -1,4 +1,4 @@
-package obd;
+package io.github.eliaxs1900.corsaecuanalysis.core;
 
 import java.util.List;
 

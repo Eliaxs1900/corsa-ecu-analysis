@@ -1,4 +1,4 @@
-package obd;
+package io.github.eliaxs1900.corsaecuanalysis.desktop;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

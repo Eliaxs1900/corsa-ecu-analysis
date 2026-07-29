@@ -1,9 +1,9 @@
-package obd.gui;
+package io.github.eliaxs1900.corsaecuanalysis.desktop.gui;
 
-import obd.Elm327;
-import obd.Kwp;
-import obd.LiveDecoder;
-import obd.DtcCatalog;
+import io.github.eliaxs1900.corsaecuanalysis.desktop.Elm327;
+import io.github.eliaxs1900.corsaecuanalysis.core.Kwp;
+import io.github.eliaxs1900.corsaecuanalysis.core.LiveDecoder;
+import io.github.eliaxs1900.corsaecuanalysis.core.DtcCatalog;
 
 import javax.swing.*;
 import java.awt.*;
@@ -37,6 +37,7 @@ public class DashboardFrame extends JFrame {
     private final JButton connectBtn = new JButton("Conectar");
     private final JButton recordBtn = new JButton("● Grabar CSV");
     private final JButton dtcBtn = new JButton("Averías");
+    private final JButton logsBtn = new JButton("Registros");
     private final JLabel statusLbl = new JLabel("Desconectado");
 
     private JLabel rpmV, turboV, pedalV, coolV, oilV, battV;
@@ -75,6 +76,7 @@ public class DashboardFrame extends JFrame {
         connectBtn.addActionListener(e -> toggleConnect());
         recordBtn.addActionListener(e -> toggleRecord());
         dtcBtn.addActionListener(e -> showDtc());
+        logsBtn.addActionListener(e -> showLogs());   // disponible siempre, sin conectar
         recordBtn.setEnabled(false);
         dtcBtn.setEnabled(false);
 
@@ -91,12 +93,12 @@ public class DashboardFrame extends JFrame {
         JButton refresh = new JButton("↻");
         refresh.addActionListener(e -> refreshPorts());
         portBox.setPreferredSize(new Dimension(240, 28));
-        for (JComponent c : new JComponent[]{portBox, connectBtn, recordBtn, dtcBtn}) {
+        for (JComponent c : new JComponent[]{portBox, connectBtn, recordBtn, dtcBtn, logsBtn}) {
             c.setFocusable(false);
         }
         statusLbl.setForeground(ACCENT);
         p.add(new lbl("Puerto:"));
-        p.add(portBox); p.add(refresh); p.add(connectBtn); p.add(recordBtn); p.add(dtcBtn);
+        p.add(portBox); p.add(refresh); p.add(connectBtn); p.add(recordBtn); p.add(dtcBtn); p.add(logsBtn);
         p.add(statusLbl);
         return p;
     }
@@ -371,6 +373,120 @@ public class DashboardFrame extends JFrame {
             SwingUtilities.invokeLater(() ->
                     JOptionPane.showMessageDialog(this, fok ? "Averías borradas." : "La ECU no confirmó el borrado."));
         }, "clear-dtc").start();
+    }
+
+    // ---------- gestión de registros (consultar / exportar / eliminar) ----------
+
+    private void showLogs() {
+        java.io.File dir = new java.io.File("logs");
+        java.io.File[] files = dir.listFiles((d, n) -> n.endsWith(".csv"));
+        if (files == null || files.length == 0) {
+            JOptionPane.showMessageDialog(this,
+                    "Todavía no hay registros.\nPulsa «Grabar CSV» durante una sesión en vivo.",
+                    "Registros", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        java.util.Arrays.sort(files, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+
+        DefaultListModel<String> modelo = new DefaultListModel<>();
+        java.time.format.DateTimeFormatter df = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        for (java.io.File f : files) {
+            String fecha = java.time.LocalDateTime.ofInstant(
+                    java.time.Instant.ofEpochMilli(f.lastModified()), java.time.ZoneId.systemDefault()).format(df);
+            modelo.addElement(String.format("%s   (%.1f KB · %s)", f.getName(), f.length() / 1024.0, fecha));
+        }
+        JList<String> lista = new JList<>(modelo);
+        lista.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        lista.setSelectedIndex(0);
+
+        JTextArea resumen = new JTextArea(9, 44);
+        resumen.setEditable(false);
+        resumen.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        lista.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting() && lista.getSelectedIndex() >= 0) {
+                resumen.setText(resumirCsv(files[lista.getSelectedIndex()]));
+                resumen.setCaretPosition(0);
+            }
+        });
+        resumen.setText(resumirCsv(files[0]));
+
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.add(new JScrollPane(lista), BorderLayout.NORTH);
+        panel.add(new JScrollPane(resumen), BorderLayout.CENTER);
+
+        Object[] opciones = {"Abrir carpeta", "Eliminar", "Cerrar"};
+        int r = JOptionPane.showOptionDialog(this, panel, "Registros guardados",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, opciones, "Cerrar");
+        int sel = lista.getSelectedIndex();
+        if (r == 0) {                                   // exportar = abrir la carpeta del CSV
+            try {
+                Desktop.getDesktop().open(dir.getAbsoluteFile());
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "No se pudo abrir la carpeta: " + ex.getMessage());
+            }
+        } else if (r == 1 && sel >= 0) {
+            java.io.File f = files[sel];
+            int c = JOptionPane.showConfirmDialog(this,
+                    "¿Eliminar «" + f.getName() + "»?\nEsta acción no se puede deshacer.",
+                    "Confirmar borrado", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (c == JOptionPane.YES_OPTION) {
+                boolean ok = f.delete();
+                JOptionPane.showMessageDialog(this, ok ? "Registro eliminado." : "No se pudo eliminar.");
+            }
+        }
+    }
+
+    /** Lee un CSV grabado y devuelve un resumen legible (muestras, duración y rangos). */
+    private String resumirCsv(java.io.File f) {
+        int muestras = 0, errores = 0;
+        long t0 = 0, t1 = 0;
+        int rpmMin = Integer.MAX_VALUE, rpmMax = Integer.MIN_VALUE;
+        int refMin = Integer.MAX_VALUE, refMax = Integer.MIN_VALUE;
+        int turMin = Integer.MAX_VALUE, turMax = Integer.MIN_VALUE;
+        int pedMin = Integer.MAX_VALUE, pedMax = Integer.MIN_VALUE;
+        try (java.io.BufferedReader in = java.nio.file.Files.newBufferedReader(f.toPath())) {
+            String ln;
+            while ((ln = in.readLine()) != null) {
+                String[] p = ln.split(",");
+                if (p.length < 3 || p[0].equals("t_ms")) continue;
+                // formato antiguo: t_ms,hora,datos_hex | nuevo: t_ms,hora,dur_ms,datos_hex,raw
+                String datos = p.length >= 5 ? p[3] : p[2];
+                if (datos.contains("ERROR")) { errores++; continue; }
+                List<Integer> bytes = new java.util.ArrayList<>();
+                for (String tok : datos.trim().split("\\s+")) {
+                    if (tok.matches("[0-9A-Fa-f]{2}")) bytes.add(Integer.parseInt(tok, 16));
+                }
+                if (bytes.size() < 60) continue;
+                LiveDecoder.Live l = LiveDecoder.decode(bytes);
+                if (l == null) continue;
+                muestras++;
+                try {
+                    long t = Long.parseLong(p[0]);
+                    if (t0 == 0) t0 = t;
+                    t1 = t;
+                } catch (NumberFormatException ignored) { }
+                if (l.ecuPowered()) {
+                    rpmMin = Math.min(rpmMin, l.rpm()); rpmMax = Math.max(rpmMax, l.rpm());
+                    refMin = Math.min(refMin, l.coolantC()); refMax = Math.max(refMax, l.coolantC());
+                    pedMin = Math.min(pedMin, l.pedalPct()); pedMax = Math.max(pedMax, l.pedalPct());
+                    if (l.boostKpa() > 0) {
+                        turMin = Math.min(turMin, l.boostKpa()); turMax = Math.max(turMax, l.boostKpa());
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            return "No se pudo leer: " + ex.getMessage();
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append(f.getName()).append('\n')
+          .append(String.format("%d muestras · %d s%s%n", muestras, (t1 - t0) / 1000,
+                  errores > 0 ? " · " + errores + " errores" : ""));
+        if (rpmMin <= rpmMax) sb.append(String.format("RPM           %d – %d%n", rpmMin, rpmMax));
+        if (refMin <= refMax) sb.append(String.format("Refrigerante  %d – %d °C%n", refMin, refMax));
+        if (turMin <= turMax) sb.append(String.format("Turbo         %d – %d kPa%n", turMin, turMax));
+        if (pedMin <= pedMax) sb.append(String.format("Acelerador    %d – %d %%%n", pedMin, pedMax));
+        sb.append("\nRuta: ").append(f.getAbsolutePath());
+        return sb.toString();
     }
 
     private static void sleep(long ms) {
