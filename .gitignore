@@ -3,3 +3,7 @@ target/
 .idea/
 *.iml
 .vscode/
+
+# fotos privadas (solo en local, nunca subir)
+fotografías-evidencias/
+*.heic
