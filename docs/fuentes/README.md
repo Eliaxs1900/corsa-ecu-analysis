@@ -9,6 +9,5 @@ por si los enlaces originales desaparecen.
 | `pinoutguide-opel-obd2.html` | Asignación de pines del conector OBD en Opel (qué módulo cuelga de cada pin K-line) | pinoutguide.com |
 | `extractos-web.md` | Contenido rescatado a mano de páginas no archivables: fallo y reparación del EDU, direccionamiento KWP2000, protocolo KW-82, referencias del ECM, dónde están los esquemas TIS | varias (ver dentro) |
 | `opel-y17dt-ecm-cableado.pdf` | **Esquema eléctrico Haynes del sistema de gestión Y17DT** (2 págs): ECU, EDU, spill valve + relé, caudalímetro, sensores (refrigerante, combustible, presión turbo, barométrico), interruptores de freno/embrague, A/C | elektroda.com topic474970 (descarga manual con cuenta) |
-| `corsa-c-fusibles.pdf` | Lista de fusibles del Corsa C con posiciones y funciones (4 págs) | elektroda.com topic474970 (descarga manual con cuenta) |
 
 Contexto y análisis en [`../referencias.md`](../referencias.md).
