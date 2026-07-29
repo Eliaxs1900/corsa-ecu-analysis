@@ -261,18 +261,20 @@ public class DashboardFrame extends JFrame {
     // ---------- actualización del cuadro ----------
 
     private void update(LiveDecoder.Live l, double hz) {
+        boolean run = l.engineRunning();
         rpmV.setText(Integer.toString(l.rpm()));
         rpmV.setForeground(l.rpm() >= 4500 ? DANGER : l.rpm() >= 3000 ? WARN : Color.WHITE);
-        turboV.setText(l.boostKpa() + "  " + String.format("%+.2f", l.boostBar()));
+        // Aceite y turbo solo son fiables con el motor en marcha.
+        turboV.setText(run ? l.boostKpa() + "  " + String.format("%+.2f", l.boostBar()) : "—");
+        oilV.setText(run ? Integer.toString(l.oilC()) : "—");
         pedalV.setText(Integer.toString(l.pedalPct()));
         coolV.setText(l.coolantC() + "  (obj " + l.coolantTargetC() + ")");
         coolV.setForeground(l.coolantC() >= 105 ? DANGER : l.coolantC() < 60 ? COLD : OK);
-        oilV.setText(Integer.toString(l.oilC()));
         battV.setText(String.format("%.1f", l.voltage()));
 
-        int pct = (int) Math.max(0, Math.min(120, l.boostBar() * 100));
+        int pct = run ? (int) Math.max(0, Math.min(120, l.boostBar() * 100)) : 0;
         boostBar.setValue(pct);
-        boostBar.setString(String.format("Turbo  %+.2f bar", l.boostBar()));
+        boostBar.setString(run ? String.format("Turbo  %+.2f bar", l.boostBar()) : "Turbo — (motor parado)");
 
         setPill(brakeI, l.brake()); setPill(clutchI, l.clutch());
         setPill(acI, l.ac()); setPill(fullI, l.fullLoad());

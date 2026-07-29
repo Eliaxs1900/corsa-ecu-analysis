@@ -19,6 +19,7 @@ public final class LiveDecoder {
             int pedalPct,        // acelerador (offset 55)
             int oilC,            // temperatura de aceite (offset 42 -40)
             boolean brake, boolean clutch, boolean ac, boolean fullLoad,
+            boolean engineRunning,   // rpm>0: con el motor parado, aceite/turbo/interruptores no son fiables
             List<Integer> raw) {}
 
     private LiveDecoder() {}
@@ -33,12 +34,14 @@ public final class LiveDecoder {
         double voltage = at(b, 30) * 0.234;
         int pedal = Math.min(100, at(b, 55) * 100 / 255);
         int oil = at(b, 42) - 40;
-        boolean brake = (at(b, 28) & 0x18) != 0;
-        boolean clutch = (at(b, 28) & 0x20) != 0;
-        boolean ac = (at(b, 23) & 0x20) != 0 || (at(b, 26) & 0x02) != 0;
-        boolean full = (at(b, 26) & 0x80) != 0;
+        // Con el motor parado (rpm=0) los interruptores traen basura; se enmascaran.
+        boolean running = rpm > 0;
+        boolean brake = running && (at(b, 28) & 0x18) != 0;
+        boolean clutch = running && (at(b, 28) & 0x20) != 0;
+        boolean ac = running && ((at(b, 23) & 0x20) != 0 || (at(b, 26) & 0x02) != 0);
+        boolean full = running && (at(b, 26) & 0x80) != 0;
         return new Live(rpm, coolant, target, boostKpa, boostBar, voltage, pedal, oil,
-                brake, clutch, ac, full, b);
+                brake, clutch, ac, full, running, b);
     }
 
     private static int at(List<Integer> b, int i) {
