@@ -1,7 +1,65 @@
-[17:23:01.922] clic en Conectar; selección = COM8  (Serie estándar sobre el vínculo Bluetooth (COM8))
-[17:23:01.939] abriendo COM8…
-[17:23:02.374] FALLO: IOException: No se pudo abrir COM8 (error 5): el puerto está ocupado. El adaptador solo admite una conexión a la vez: cierra la app del móvil (o desconéctala) y reintenta. Si sigue igual, desenchufa el adaptador del coche unos segundos.
-java.io.IOException: No se pudo abrir COM8 (error 5): el puerto está ocupado. El adaptador solo admite una conexión a la vez: cierra la app del móvil (o desconéctala) y reintenta. Si sigue igual, desenchufa el adaptador del coche unos segundos.
+[17:26:01.351] clic en Conectar; selección = COM8  (Serie estándar sobre el vínculo Bluetooth (COM8))
+[17:26:01.359] abriendo COM8…
+[17:26:03.333] FALLO: IOException: No se pudo abrir COM8 (error 5): acceso denegado. O bien el adaptador ya está conectado a otro equipo (solo admite uno a la vez), o Windows tiene un enlace Bluetooth colgado. Cierra la app del móvil; si sigue igual, apaga y enciende el Bluetooth de Windows.
+java.io.IOException: No se pudo abrir COM8 (error 5): acceso denegado. O bien el adaptador ya está conectado a otro equipo (solo admite uno a la vez), o Windows tiene un enlace Bluetooth colgado. Cierra la app del móvil; si sigue igual, apaga y enciende el Bluetooth de Windows.
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.Elm327.abrir(Elm327.java:53)
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.gui.DashboardFrame.lambda$connect$0(DashboardFrame.java:194)
+	at java.base/java.lang.Thread.run(Thread.java:1516)
+[17:26:07.210] clic en Conectar; selección = COM8  (Serie estándar sobre el vínculo Bluetooth (COM8))
+[17:26:07.212] abriendo COM8…
+[17:26:07.401] FALLO: IOException: No se pudo abrir COM8 (error 5): acceso denegado. O bien el adaptador ya está conectado a otro equipo (solo admite uno a la vez), o Windows tiene un enlace Bluetooth colgado. Cierra la app del móvil; si sigue igual, apaga y enciende el Bluetooth de Windows.
+java.io.IOException: No se pudo abrir COM8 (error 5): acceso denegado. O bien el adaptador ya está conectado a otro equipo (solo admite uno a la vez), o Windows tiene un enlace Bluetooth colgado. Cierra la app del móvil; si sigue igual, apaga y enciende el Bluetooth de Windows.
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.Elm327.abrir(Elm327.java:53)
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.gui.DashboardFrame.lambda$connect$0(DashboardFrame.java:194)
+	at java.base/java.lang.Thread.run(Thread.java:1516)
+[17:26:08.278] clic en Conectar; selección = COM8  (Serie estándar sobre el vínculo Bluetooth (COM8))
+[17:26:08.281] abriendo COM8…
+[17:26:08.404] FALLO: IOException: No se pudo abrir COM8 (error 5): acceso denegado. O bien el adaptador ya está conectado a otro equipo (solo admite uno a la vez), o Windows tiene un enlace Bluetooth colgado. Cierra la app del móvil; si sigue igual, apaga y enciende el Bluetooth de Windows.
+java.io.IOException: No se pudo abrir COM8 (error 5): acceso denegado. O bien el adaptador ya está conectado a otro equipo (solo admite uno a la vez), o Windows tiene un enlace Bluetooth colgado. Cierra la app del móvil; si sigue igual, apaga y enciende el Bluetooth de Windows.
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.Elm327.abrir(Elm327.java:53)
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.gui.DashboardFrame.lambda$connect$0(DashboardFrame.java:194)
+	at java.base/java.lang.Thread.run(Thread.java:1516)
+[17:26:12.283] clic en Conectar; selección = COM7  (Serie estándar sobre el vínculo Bluetooth (COM7))
+[17:26:12.285] abriendo COM7…
+[17:26:12.288] puerto abierto; enviando ATZ
+  >> ATZ
+[17:26:17.389] FALLO: IOException: No se pudo escribir en el puerto: el adaptador no responde (¿tiene alimentación? ¿es este el COM saliente?)
+java.io.IOException: No se pudo escribir en el puerto: el adaptador no responde (¿tiene alimentación? ¿es este el COM saliente?)
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.Elm327.send(Elm327.java:98)
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.gui.DashboardFrame.lambda$connect$0(DashboardFrame.java:197)
+	at java.base/java.lang.Thread.run(Thread.java:1516)
+[17:26:19.304] clic en Conectar; selección = COM7  (Serie estándar sobre el vínculo Bluetooth (COM7))
+[17:26:19.306] abriendo COM7…
+[17:26:19.306] FALLO: IOException: No se pudo abrir COM7 (error 2): el adaptador no está accesible. Comprueba que está enchufado al conector OBD y dentro del alcance del Bluetooth.
+java.io.IOException: No se pudo abrir COM7 (error 2): el adaptador no está accesible. Comprueba que está enchufado al conector OBD y dentro del alcance del Bluetooth.
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.Elm327.abrir(Elm327.java:53)
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.gui.DashboardFrame.lambda$connect$0(DashboardFrame.java:194)
+	at java.base/java.lang.Thread.run(Thread.java:1516)
+[17:26:20.855] clic en Conectar; selección = COM7  (Serie estándar sobre el vínculo Bluetooth (COM7))
+[17:26:20.857] abriendo COM7…
+[17:26:20.857] FALLO: IOException: No se pudo abrir COM7 (error 2): el adaptador no está accesible. Comprueba que está enchufado al conector OBD y dentro del alcance del Bluetooth.
+java.io.IOException: No se pudo abrir COM7 (error 2): el adaptador no está accesible. Comprueba que está enchufado al conector OBD y dentro del alcance del Bluetooth.
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.Elm327.abrir(Elm327.java:53)
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.gui.DashboardFrame.lambda$connect$0(DashboardFrame.java:194)
+	at java.base/java.lang.Thread.run(Thread.java:1516)
+[17:26:21.058] clic en Conectar; selección = COM7  (Serie estándar sobre el vínculo Bluetooth (COM7))
+[17:26:21.062] abriendo COM7…
+[17:26:21.062] FALLO: IOException: No se pudo abrir COM7 (error 2): el adaptador no está accesible. Comprueba que está enchufado al conector OBD y dentro del alcance del Bluetooth.
+java.io.IOException: No se pudo abrir COM7 (error 2): el adaptador no está accesible. Comprueba que está enchufado al conector OBD y dentro del alcance del Bluetooth.
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.Elm327.abrir(Elm327.java:53)
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.gui.DashboardFrame.lambda$connect$0(DashboardFrame.java:194)
+	at java.base/java.lang.Thread.run(Thread.java:1516)
+[17:26:25.878] clic en Conectar; selección = COM8  (Serie estándar sobre el vínculo Bluetooth (COM8))
+[17:26:25.880] abriendo COM8…
+[17:26:26.093] FALLO: IOException: No se pudo abrir COM8 (error 5): acceso denegado. O bien el adaptador ya está conectado a otro equipo (solo admite uno a la vez), o Windows tiene un enlace Bluetooth colgado. Cierra la app del móvil; si sigue igual, apaga y enciende el Bluetooth de Windows.
+java.io.IOException: No se pudo abrir COM8 (error 5): acceso denegado. O bien el adaptador ya está conectado a otro equipo (solo admite uno a la vez), o Windows tiene un enlace Bluetooth colgado. Cierra la app del móvil; si sigue igual, apaga y enciende el Bluetooth de Windows.
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.Elm327.abrir(Elm327.java:53)
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.gui.DashboardFrame.lambda$connect$0(DashboardFrame.java:194)
+	at java.base/java.lang.Thread.run(Thread.java:1516)
+[17:26:27.836] clic en Conectar; selección = COM7  (Serie estándar sobre el vínculo Bluetooth (COM7))
+[17:26:27.838] abriendo COM7…
+[17:26:27.838] FALLO: IOException: No se pudo abrir COM7 (error 2): el adaptador no está accesible. Comprueba que está enchufado al conector OBD y dentro del alcance del Bluetooth.
+java.io.IOException: No se pudo abrir COM7 (error 2): el adaptador no está accesible. Comprueba que está enchufado al conector OBD y dentro del alcance del Bluetooth.
 	at io.github.eliaxs1900.corsaecuanalysis.desktop.Elm327.abrir(Elm327.java:53)
 	at io.github.eliaxs1900.corsaecuanalysis.desktop.gui.DashboardFrame.lambda$connect$0(DashboardFrame.java:194)
 	at java.base/java.lang.Thread.run(Thread.java:1516)

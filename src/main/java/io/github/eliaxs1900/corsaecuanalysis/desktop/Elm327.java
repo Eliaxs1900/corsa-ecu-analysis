@@ -50,7 +50,13 @@ public final class Elm327 implements Transport, AutoCloseable {
         // bloquea indefinidamente si el adaptador no está encendido/al alcance.
         p.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING | SerialPort.TIMEOUT_WRITE_BLOCKING, 200, 5_000);
         if (!p.openPort()) {
-            throw new IOException(explicarFallo(nombrePuerto, p.getLastErrorCode()));
+            int codigo = p.getLastErrorCode();
+            // Aunque la apertura falle, Windows puede haber dejado a medias el
+            // enlace RFCOMM con el adaptador Bluetooth. Si no se cierra aquí, el
+            // enlace queda colgado (el adaptador sigue "conectado" en Windows) y
+            // el siguiente intento choca con ACCESO DENEGADO.
+            try { p.closePort(); } catch (Exception ignorada) { }
+            throw new IOException(explicarFallo(nombrePuerto, codigo));
         }
         return new Elm327(p);
     }
