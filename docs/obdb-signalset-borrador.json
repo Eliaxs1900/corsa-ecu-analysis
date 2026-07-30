@@ -1,0 +1,125 @@
+{
+  "_comentario": [
+    "BORRADOR de aportación a OBDb (https://github.com/OBDb) para el Opel/Vauxhall",
+    "Corsa C 1.7 DI, motor Y17DTL (2003). NO es un fichero del proyecto: es una",
+    "propuesta pendiente de confirmar con ellos, porque este coche es PRE-CAN y su",
+    "esquema usa identificadores CAN en 'hdr'/'rax'.",
+    "",
+    "Aquí 'hdr' es la cabecera KWP2000 por K-line (formato+destino+origen) y 'rax'",
+    "la de la respuesta. El servicio es 21 (ReadDataByLocalIdentifier), igual que",
+    "usa el Toyota-4Runner en su repo, con identificador local 01.",
+    "",
+    "Los 'bix' son el desplazamiento en bits dentro del bloque de 68 bytes que",
+    "devuelve la ECU (bix = offset_en_bytes * 8). Todos los valores se han obtenido",
+    "por ingeniería inversa contra el coche real y validado con ~2900 muestras.",
+    "Detalle y evidencia: docs/mapa-21-01.md del repo corsa-ecu-analysis."
+  ],
+  "commands": [
+    {
+      "hdr": "8111F1",
+      "rax": "93F111",
+      "proto": "ISO14230-4-KWP-fastinit",
+      "cmd": { "21": "01" },
+      "freq": 2,
+      "signals": [
+        {
+          "id": "CORSAC_RPM",
+          "path": "Engine",
+          "fmt": { "bix": 264, "len": 16, "max": 6000, "div": 8, "unit": "revolutionsPerMinute" },
+          "name": "Engine speed",
+          "suggestedMetric": "engineSpeed"
+        },
+        {
+          "id": "CORSAC_ECT",
+          "path": "Engine",
+          "fmt": { "bix": 328, "len": 8, "min": 0, "max": 127, "div": 2, "unit": "celsius" },
+          "name": "Engine coolant temperature",
+          "suggestedMetric": "engineCoolantTemperature"
+        },
+        {
+          "id": "CORSAC_ECT_TARGET",
+          "path": "Engine",
+          "fmt": { "bix": 304, "len": 8, "min": -40, "max": 215, "add": -40, "unit": "celsius" },
+          "name": "Coolant thermostat setpoint (constant ~88 C, not a sensor)"
+        },
+        {
+          "id": "CORSAC_ECT_RAW",
+          "path": "Engine",
+          "fmt": { "bix": 320, "len": 8, "max": 255 },
+          "name": "Coolant sensor raw NTC reading (inverse scale)"
+        },
+        {
+          "id": "CORSAC_IAT_RAW",
+          "path": "Engine",
+          "fmt": { "bix": 336, "len": 8, "max": 255 },
+          "name": "Intake air temperature, raw NTC reading (inverse scale; not yet linearised)"
+        },
+        {
+          "id": "CORSAC_MAP",
+          "path": "Engine",
+          "fmt": { "bix": 400, "len": 8, "max": 255, "unit": "kilopascal" },
+          "name": "Manifold absolute pressure (turbo boost)",
+          "suggestedMetric": "manifoldPressure"
+        },
+        {
+          "id": "CORSAC_BATT",
+          "path": "Electrical",
+          "fmt": { "bix": 240, "len": 8, "max": 20, "mul": 234, "div": 1000, "unit": "volts" },
+          "name": "Battery voltage as measured by the ECU",
+          "suggestedMetric": "batteryVoltage"
+        },
+        {
+          "id": "CORSAC_PEDAL",
+          "path": "Engine",
+          "fmt": { "bix": 440, "len": 8, "max": 100, "mul": 100, "div": 255, "unit": "percent" },
+          "name": "Accelerator pedal position"
+        },
+        {
+          "id": "CORSAC_PEDAL_T1",
+          "path": "Engine",
+          "fmt": { "bix": 416, "len": 8, "max": 255 },
+          "name": "Accelerator pedal, track 1 (redundant sensor)"
+        },
+        {
+          "id": "CORSAC_PEDAL_T2",
+          "path": "Engine",
+          "fmt": { "bix": 424, "len": 8, "max": 255 },
+          "name": "Accelerator pedal, track 2 (redundant sensor, ~track1/2)"
+        },
+        {
+          "id": "CORSAC_BRAKE",
+          "path": "Movement",
+          "fmt": { "bix": 227, "len": 1 },
+          "name": "Brake pedal switch (dual contact: bits 3 and 4 must agree)"
+        },
+        {
+          "id": "CORSAC_CLUTCH",
+          "path": "Movement",
+          "fmt": { "bix": 229, "len": 1 },
+          "name": "Clutch pedal switch"
+        },
+        {
+          "id": "CORSAC_AC_REQ",
+          "path": "Climate",
+          "fmt": { "bix": 189, "len": 1 },
+          "name": "Air conditioning request"
+        },
+        {
+          "id": "CORSAC_FULL_LOAD",
+          "path": "Engine",
+          "fmt": { "bix": 208, "len": 1 },
+          "name": "Full load flag (software threshold, pedal >95%)"
+        }
+      ]
+    }
+  ],
+  "_notas": [
+    "NO EXISTE canal de velocidad del vehículo: la ECU del motor no la recibe",
+    "(coche sin ABS; la señal va solo al cuadro). Verificado conduciendo 0-120 km/h.",
+    "El coche NO mide temperatura de aceite (solo tiene testigo de presión).",
+    "Otros identificadores que responden al servicio 21: 90 (VIN) y A5-A9, B1, B3",
+    "(registros de 2 bytes sin identificar).",
+    "Averías: servicio 18 00 FF 00 (ReadDiagnosticTroubleCodesByStatus); usa códigos",
+    "P estándar SAE J2012 (confirmado con el P0251 de la bomba inyectora)."
+  ]
+}

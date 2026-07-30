@@ -660,19 +660,67 @@ public class DashboardFrame extends JFrame {
         else startRecording();
     }
 
+    /**
+     * Empieza a grabar. Antes de la primera muestra consulta la ECU y anota en la
+     * cabecera el VIN y las averías de partida, para que el registro quede
+     * autocontenido: al reproducirlo se sabe qué códigos había en ese momento.
+     */
     private void startRecording() {
-        try {
-            Path dir = Path.of("logs");
-            Files.createDirectories(dir);
-            String name = "gui-01-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".csv";
-            rec = new PrintWriter(Files.newBufferedWriter(dir.resolve(name)));
-            rec.println("t_ms,hora,dur_ms,datos_hex,raw_completo");
-            recCount = 0; recording = true;
-            recordBtn.setText("■ Detener");
-            status("Grabando en logs/" + name, ACCENT);
-        } catch (IOException ex) {
-            status("No se pudo grabar: " + ex.getMessage(), DANGER);
+        recordBtn.setEnabled(false);
+        status("Consultando averías antes de grabar…", ACCENT);
+        new Thread(() -> {
+            String vin = null;
+            String averias = "no se pudieron leer";
+            String rawDtc = "";
+            Kwp k = kwp;
+            if (k != null) {
+                try { synchronized (bus) { vin = k.identificacion(0x90); } } catch (Exception ignored) { }
+                try {
+                    synchronized (bus) {
+                        averias = describirDtc(k.leerDtc());
+                        rawDtc = limpiarRaw(k.ultimaRespuestaCruda());   // trama tal cual llegó
+                    }
+                } catch (Exception ignored) { }
+            }
+            final String fvin = vin, faverias = averias, frawDtc = rawDtc;
+            SwingUtilities.invokeLater(() -> {
+                try {
+                    Path dir = Path.of("logs");
+                    Files.createDirectories(dir);
+                    String name = "gui-01-" + LocalDateTime.now().format(
+                            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".csv";
+                    rec = new PrintWriter(Files.newBufferedWriter(dir.resolve(name)));
+                    // Cabecera con contexto (las líneas '#' las ignoran los lectores)
+                    rec.println("# vehiculo: " + (fvin != null ? fvin : "desconocido"));
+                    rec.println("# inicio: " + LocalDateTime.now());
+                    rec.println("# averias-inicio: " + faverias);
+                    // Trama cruda del servicio 18 (cabecera KWP + datos + checksum):
+                    // obligatoria para poder reinspeccionar el registro sin el coche.
+                    rec.println("# averias-inicio-raw: " + frawDtc);
+                    rec.println("t_ms,hora,dur_ms,datos_hex,raw_completo");
+                    rec.flush();
+                    recCount = 0; recording = true;
+                    recordBtn.setText("■ Detener");
+                    recordBtn.setEnabled(true);
+                    status("Grabando en logs/" + name, ACCENT);
+                } catch (IOException ex) {
+                    recordBtn.setEnabled(true);
+                    status("No se pudo grabar: " + ex.getMessage(), DANGER);
+                }
+            });
+        }, "inicio-grabacion").start();
+    }
+
+    /** Texto corto con las averías, para la cabecera del registro. */
+    private String describirDtc(List<Kwp.Dtc> lista) {
+        if (lista.isEmpty()) return "ninguna";
+        StringBuilder sb = new StringBuilder();
+        for (Kwp.Dtc d : lista) {
+            if (sb.length() > 0) sb.append(" | ");
+            sb.append(d.codigo()).append(' ').append(DtcCatalog.describe(d.codigo()))
+              .append(d.activo() ? " [ACTIVO]" : "");
         }
+        return sb.toString().replace(",", ";");   // el fichero es CSV
     }
 
     private synchronized void writeSample(long t0, long dur, List<Integer> data, String raw) {
@@ -685,10 +733,49 @@ public class DashboardFrame extends JFrame {
         recCount++;
     }
 
+    /**
+     * Detiene la grabación. Vuelve a consultar las averías y las anota al final:
+     * si aparece un código que no estaba al principio, se produjo durante esa
+     * sesión (lo típico de un fallo intermitente).
+     */
     private void stopRecording() {
-        recording = false;
-        if (rec != null) { rec.flush(); rec.close(); rec = null; }
-        SwingUtilities.invokeLater(() -> recordBtn.setText("● Grabar CSV"));
+        if (!recording) return;
+        recording = false;                       // el sondeo deja de escribir ya
+        Kwp k = kwp;
+        if (k == null || !connected) { cerrarFichero(null, null); return; }
+        SwingUtilities.invokeLater(() -> status("Consultando averías al terminar…", ACCENT));
+        new Thread(() -> {
+            String averias, raw = "";
+            try {
+                synchronized (bus) {
+                    averias = describirDtc(k.leerDtc());
+                    raw = limpiarRaw(k.ultimaRespuestaCruda());
+                }
+            } catch (Exception ex) { averias = "no se pudieron leer"; }
+            cerrarFichero(averias, raw);
+        }, "fin-grabacion").start();
+    }
+
+    /** Deja la trama cruda en una línea, apta para el CSV. */
+    private static String limpiarRaw(String raw) {
+        return raw == null ? "" : raw.replace("\r", " ").replace("\n", " ").replace(",", ";").trim();
+    }
+
+    private synchronized void cerrarFichero(String averiasFinales, String rawFinal) {
+        if (rec != null) {
+            if (averiasFinales != null) {
+                rec.println("# fin: " + LocalDateTime.now());
+                rec.println("# averias-final: " + averiasFinales);
+                rec.println("# averias-final-raw: " + (rawFinal == null ? "" : rawFinal));
+            }
+            rec.flush();
+            rec.close();
+            rec = null;
+        }
+        SwingUtilities.invokeLater(() -> {
+            recordBtn.setText("● Grabar CSV");
+            recordBtn.setEnabled(connected);
+        });
     }
 
     // ---------- averías ----------
@@ -761,7 +848,7 @@ public class DashboardFrame extends JFrame {
 
         JLabel tituloDet = new lbl("Selecciona un registro");
         tituloDet.setFont(tituloDet.getFont().deriveFont(Font.BOLD, 13f));
-        JLabel[] campos = new JLabel[6];
+        JLabel[] campos = new JLabel[7];
         detalle.add(tituloDet);
         detalle.add(Box.createVerticalStrut(10));
         for (int i = 0; i < campos.length; i++) {
@@ -933,9 +1020,16 @@ public class DashboardFrame extends JFrame {
         int refMin = Integer.MAX_VALUE, refMax = Integer.MIN_VALUE;
         int turMin = Integer.MAX_VALUE, turMax = Integer.MIN_VALUE;
         int pedMin = Integer.MAX_VALUE, pedMax = Integer.MIN_VALUE;
+        String vin = null, dtcIni = null, dtcFin = null;
         try (java.io.BufferedReader in = java.nio.file.Files.newBufferedReader(f.toPath())) {
             String ln;
             while ((ln = in.readLine()) != null) {
+                if (ln.startsWith("#")) {           // cabecera con el contexto de la sesión
+                    if (ln.startsWith("# vehiculo:")) vin = ln.substring(11).trim();
+                    else if (ln.startsWith("# averias-inicio:")) dtcIni = ln.substring(17).trim();
+                    else if (ln.startsWith("# averias-final:")) dtcFin = ln.substring(16).trim();
+                    continue;
+                }
                 String[] p = ln.split(",");
                 if (p.length < 3 || p[0].equals("t_ms")) continue;
                 // formato antiguo: t_ms,hora,datos_hex | nuevo: t_ms,hora,dur_ms,datos_hex,raw
@@ -968,6 +1062,18 @@ public class DashboardFrame extends JFrame {
         }
         long seg = (t1 - t0) / 1000;
         String duracion = seg >= 60 ? String.format("%d min %d s", seg / 60, seg % 60) : seg + " s";
+
+        // Averías: se destaca si aparecieron durante la sesión.
+        String averias;
+        if (dtcIni == null && dtcFin == null) {
+            averias = "  Averías          (registro antiguo, sin datos)";
+        } else if (dtcFin != null && dtcIni != null && !dtcFin.equals(dtcIni)) {
+            averias = "  ⚠ Averías        CAMBIARON durante la sesión → " + dtcFin;
+        } else {
+            String d = dtcFin != null ? dtcFin : dtcIni;
+            averias = "  Averías          " + d;
+        }
+
         return new String[]{
                 String.format("  %,d muestras   ·   %s%s", muestras, duracion,
                         errores > 0 ? "   ·   " + errores + " errores" : ""),
@@ -975,7 +1081,8 @@ public class DashboardFrame extends JFrame {
                 refMin <= refMax ? String.format("  Refrigerante     %d – %d °C", refMin, refMax) : " ",
                 turMin <= turMax ? String.format("  Turbo            %d – %d kPa", turMin, turMax) : " ",
                 pedMin <= pedMax ? String.format("  Acelerador       %d – %d %%", pedMin, pedMax) : " ",
-                "  " + f.getParent(),
+                averias,
+                vin != null ? "  Vehículo         " + vin : "  " + f.getParent(),
         };
     }
 
