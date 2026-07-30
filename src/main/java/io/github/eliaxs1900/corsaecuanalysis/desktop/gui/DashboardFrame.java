@@ -55,6 +55,20 @@ public class DashboardFrame extends JFrame {
     private int recCount;
     private volatile boolean recording;
 
+    // ---- reproductor de registros ----
+    /** Un cuadro del registro: instante y valores ya descodificados. */
+    private record Cuadro(long tMs, LiveDecoder.Live live) {}
+    private final java.util.List<Cuadro> cuadros = new java.util.ArrayList<>();
+    private javax.swing.Timer reproductorTimer;
+    private JPanel reproductorPanel;
+    private JSlider linea;
+    private JButton playBtn;
+    private JLabel posLbl, nombreRegLbl;
+    private JComboBox<String> velBox;
+    private volatile boolean reproduciendo;
+    private long inicioReproduccion;     // reloj real al pulsar play
+    private long offsetRegistro;         // instante del registro donde se reanudó
+
     public static void launch() { launch(false); }
 
     /**
@@ -82,7 +96,11 @@ public class DashboardFrame extends JFrame {
 
         add(buildTopBar(), BorderLayout.NORTH);
         add(buildCenter(), BorderLayout.CENTER);
-        add(buildSwitches(), BorderLayout.SOUTH);
+        JPanel abajo = new JPanel(new BorderLayout(0, 8));
+        abajo.setBackground(BG);
+        abajo.add(buildSwitches(), BorderLayout.NORTH);
+        abajo.add(buildReproductor(), BorderLayout.SOUTH);
+        add(abajo, BorderLayout.SOUTH);
 
         refreshPorts();
         connectBtn.addActionListener(e -> toggleConnect());
@@ -162,6 +180,166 @@ public class DashboardFrame extends JFrame {
         brakeI = pill("Freno"); clutchI = pill("Embrague"); acI = pill("A/C"); fullI = pill("Plena carga");
         p.add(brakeI); p.add(clutchI); p.add(acI); p.add(fullI);
         return p;
+    }
+
+    /**
+     * Barra de reproducción de registros, al estilo de un editor de vídeo: línea
+     * de tiempo con el cuadro actual, play/pausa y velocidad. Oculta hasta que se
+     * abre un registro.
+     */
+    private JComponent buildReproductor() {
+        reproductorPanel = new JPanel(new BorderLayout(8, 2));
+        reproductorPanel.setBackground(CARD);
+        reproductorPanel.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
+        reproductorPanel.setVisible(false);
+
+        nombreRegLbl = new lbl("");
+        nombreRegLbl.setForeground(ACCENT);
+        nombreRegLbl.setFont(nombreRegLbl.getFont().deriveFont(Font.BOLD, 11f));
+        reproductorPanel.add(nombreRegLbl, BorderLayout.NORTH);
+
+        linea = new JSlider(0, 0, 0);
+        linea.setBackground(CARD);
+        linea.setFocusable(false);
+        // Arrastrar la línea de tiempo salta a ese cuadro al instante.
+        linea.addChangeListener(e -> {
+            if (linea.getValueIsAdjusting() || !reproduciendo) {
+                mostrarCuadro(linea.getValue());
+                if (linea.getValueIsAdjusting()) {   // el usuario está arrastrando
+                    offsetRegistro = cuadros.isEmpty() ? 0
+                            : cuadros.get(linea.getValue()).tMs() - cuadros.get(0).tMs();
+                    inicioReproduccion = System.currentTimeMillis();
+                }
+            }
+        });
+        reproductorPanel.add(linea, BorderLayout.CENTER);
+
+        playBtn = new JButton("▶");
+        playBtn.setFocusable(false);
+        playBtn.addActionListener(e -> alternarReproduccion());
+
+        JButton inicioBtn = new JButton("⏮");
+        inicioBtn.setFocusable(false);
+        inicioBtn.addActionListener(e -> { pausar(); irACuadro(0); });
+
+        JButton cerrarRepBtn = new JButton("✕");
+        cerrarRepBtn.setFocusable(false);
+        cerrarRepBtn.setToolTipText("Cerrar el reproductor");
+        cerrarRepBtn.addActionListener(e -> cerrarReproductor());
+
+        velBox = new JComboBox<>(new String[]{"0,25×", "0,5×", "1×", "2×", "4×", "8×"});
+        velBox.setSelectedIndex(2);
+        velBox.setFocusable(false);
+        velBox.setToolTipText("Velocidad de reproducción");
+
+        posLbl = new lbl("");
+        posLbl.setForeground(MUTED);
+        posLbl.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11));
+
+        JPanel controles = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        controles.setBackground(CARD);
+        controles.add(inicioBtn); controles.add(playBtn); controles.add(velBox);
+        controles.add(posLbl); controles.add(cerrarRepBtn);
+        reproductorPanel.add(controles, BorderLayout.SOUTH);
+
+        // Avanza según el tiempo real transcurrido, respetando las marcas del registro.
+        reproductorTimer = new javax.swing.Timer(40, e -> avanzarReproduccion());
+        return reproductorPanel;
+    }
+
+    /** Carga un CSV grabado y lo deja listo para reproducir. */
+    private void cargarRegistro(java.io.File f) {
+        cuadros.clear();
+        try (java.io.BufferedReader in = Files.newBufferedReader(f.toPath())) {
+            String ln;
+            while ((ln = in.readLine()) != null) {
+                String[] p = ln.split(",");
+                if (p.length < 3 || p[0].equals("t_ms")) continue;
+                String datos = p.length >= 5 ? p[3] : p[2];      // formato nuevo / antiguo
+                if (datos.contains("ERROR")) continue;
+                List<Integer> bytes = new java.util.ArrayList<>();
+                for (String tok : datos.trim().split("\\s+")) {
+                    if (tok.matches("[0-9A-Fa-f]{2}")) bytes.add(Integer.parseInt(tok, 16));
+                }
+                if (bytes.size() < 60) continue;
+                LiveDecoder.Live l = LiveDecoder.decode(bytes);
+                if (l == null) continue;
+                long t;
+                try { t = Long.parseLong(p[0]); } catch (NumberFormatException ex) { continue; }
+                cuadros.add(new Cuadro(t, l));
+            }
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "No se pudo abrir el registro: " + ex.getMessage());
+            return;
+        }
+        if (cuadros.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "El registro no tiene muestras válidas.");
+            return;
+        }
+        long dur = (cuadros.get(cuadros.size() - 1).tMs() - cuadros.get(0).tMs()) / 1000;
+        nombreRegLbl.setText("Reproduciendo:  " + f.getName()
+                + "   ·   " + cuadros.size() + " cuadros   ·   " + dur + " s");
+        linea.setMaximum(cuadros.size() - 1);
+        reproductorPanel.setVisible(true);
+        revalidate();
+        irACuadro(0);
+        status("Registro cargado — usa la línea de tiempo o pulsa ▶", ACCENT);
+    }
+
+    private void alternarReproduccion() {
+        if (reproduciendo) pausar();
+        else {
+            if (linea.getValue() >= cuadros.size() - 1) irACuadro(0);
+            reproduciendo = true;
+            playBtn.setText("⏸");
+            inicioReproduccion = System.currentTimeMillis();
+            offsetRegistro = cuadros.get(linea.getValue()).tMs() - cuadros.get(0).tMs();
+            reproductorTimer.start();
+        }
+    }
+
+    private void pausar() {
+        reproduciendo = false;
+        playBtn.setText("▶");
+        reproductorTimer.stop();
+    }
+
+    /** Calcula qué cuadro toca según el tiempo real transcurrido y la velocidad. */
+    private void avanzarReproduccion() {
+        if (cuadros.isEmpty()) return;
+        double vel = switch (velBox.getSelectedIndex()) {
+            case 0 -> 0.25; case 1 -> 0.5; case 3 -> 2; case 4 -> 4; case 5 -> 8; default -> 1;
+        };
+        long transcurrido = (long) ((System.currentTimeMillis() - inicioReproduccion) * vel);
+        long objetivo = cuadros.get(0).tMs() + offsetRegistro + transcurrido;
+        int i = linea.getValue();
+        while (i < cuadros.size() - 1 && cuadros.get(i + 1).tMs() <= objetivo) i++;
+        if (i >= cuadros.size() - 1) { irACuadro(cuadros.size() - 1); pausar(); return; }
+        irACuadro(i);
+    }
+
+    private void irACuadro(int i) {
+        linea.setValue(i);
+        mostrarCuadro(i);
+    }
+
+    /** Vuelca en el cuadro de mandos los valores del cuadro indicado. */
+    private void mostrarCuadro(int i) {
+        if (i < 0 || i >= cuadros.size()) return;
+        Cuadro c = cuadros.get(i);
+        update(c.live(), 0);
+        long t = (c.tMs() - cuadros.get(0).tMs()) / 1000;
+        long total = (cuadros.get(cuadros.size() - 1).tMs() - cuadros.get(0).tMs()) / 1000;
+        posLbl.setText(String.format("%02d:%02d / %02d:%02d   ·   cuadro %d/%d",
+                t / 60, t % 60, total / 60, total % 60, i + 1, cuadros.size()));
+    }
+
+    private void cerrarReproductor() {
+        pausar();
+        cuadros.clear();
+        reproductorPanel.setVisible(false);
+        revalidate();
+        if (!connected) { limpiarValores(); status("Desconectado", MUTED); }
     }
 
     /**
@@ -455,7 +633,11 @@ public class DashboardFrame extends JFrame {
 
         setPill(brakeI, l.brake()); setPill(clutchI, l.clutch());
         setPill(acI, l.ac()); setPill(fullI, l.fullLoad());
-        if (pw) {
+        if (hz == 0 && !cuadros.isEmpty()) {
+            // Reproducción de un registro: el estado lo lleva la barra del reproductor.
+            statusLbl.setText(reproduciendo ? "▶ Reproduciendo registro" : "⏸ Registro en pausa");
+            statusLbl.setForeground(ACCENT);
+        } else if (pw) {
             statusLbl.setText(String.format("En vivo · %.1f Hz%s", hz, recording ? " · REC " + recCount : ""));
             statusLbl.setForeground(OK);
         } else {
@@ -607,6 +789,8 @@ public class DashboardFrame extends JFrame {
         d.add(resumenTotal, BorderLayout.NORTH);
 
         // --- acciones ---
+        JButton reproducir = new JButton("▶  Reproducir");
+        reproducir.setFont(reproducir.getFont().deriveFont(Font.BOLD));
         JButton abrir = new JButton("Abrir carpeta");
         JButton exportar = new JButton("Exportar…");
         JButton borrar = new JButton("Eliminar");
@@ -614,9 +798,23 @@ public class DashboardFrame extends JFrame {
         JButton cerrar = new JButton("Cerrar");
         JPanel acciones = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 4));
         acciones.setBackground(BG);
-        acciones.add(abrir); acciones.add(exportar); acciones.add(borrar);
-        acciones.add(borrarTodos); acciones.add(cerrar);
+        acciones.add(reproducir); acciones.add(abrir); acciones.add(exportar);
+        acciones.add(borrar); acciones.add(borrarTodos); acciones.add(cerrar);
         d.add(acciones, BorderLayout.SOUTH);
+
+        // Abrir el registro en el cuadro de mandos, con línea de tiempo.
+        Runnable reproducirSel = () -> {
+            java.io.File f = lista.getSelectedValue();
+            if (f == null) return;
+            d.dispose();
+            cargarRegistro(f);
+        };
+        reproducir.addActionListener(e -> reproducirSel.run());
+        lista.addMouseListener(new java.awt.event.MouseAdapter() {   // doble clic = reproducir
+            @Override public void mouseClicked(java.awt.event.MouseEvent ev) {
+                if (ev.getClickCount() == 2) reproducirSel.run();
+            }
+        });
 
         Runnable recargar = () -> {
             modelo.clear();
@@ -630,7 +828,7 @@ public class DashboardFrame extends JFrame {
                 resumenTotal.setText("No hay registros todavía. Pulsa «Grabar CSV» durante una sesión en vivo.");
             }
             boolean hay = modelo.size() > 0;
-            for (JButton b : new JButton[]{exportar, borrar, borrarTodos}) b.setEnabled(hay);
+            for (JButton b : new JButton[]{reproducir, exportar, borrar, borrarTodos}) b.setEnabled(hay);
             if (hay) lista.setSelectedIndex(0);
             else { tituloDet.setText("Sin registros"); for (JLabel c : campos) c.setText(" "); }
         };
