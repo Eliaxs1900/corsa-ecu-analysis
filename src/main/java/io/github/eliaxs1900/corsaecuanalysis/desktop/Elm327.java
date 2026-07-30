@@ -43,10 +43,27 @@ public final class Elm327 implements Transport, AutoCloseable {
         // bloquea indefinidamente si el adaptador no está encendido/al alcance.
         p.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING | SerialPort.TIMEOUT_WRITE_BLOCKING, 200, 5_000);
         if (!p.openPort()) {
-            throw new IOException("No se pudo abrir " + nombrePuerto
-                    + " (¿está emparejado el iCar2 y es este el COM saliente?)");
+            throw new IOException(explicarFallo(nombrePuerto, p.getLastErrorCode()));
         }
         return new Elm327(p);
+    }
+
+    /**
+     * Traduce el código de error de Windows a una causa accionable. El más
+     * habitual con un adaptador SPP es el 5 (acceso denegado): estos adaptadores
+     * solo admiten UNA conexión a la vez, así que si el móvil está conectado el
+     * PC no puede abrir el puerto.
+     */
+    private static String explicarFallo(String puerto, int codigo) {
+        String causa = switch (codigo) {
+            case 5 -> "el puerto está ocupado. El adaptador solo admite una conexión a la vez: "
+                    + "cierra la app del móvil (o desconéctala) y reintenta. "
+                    + "Si sigue igual, desenchufa el adaptador del coche unos segundos.";
+            case 2, 1167 -> "el adaptador no está accesible. Comprueba que está enchufado al "
+                    + "conector OBD y dentro del alcance del Bluetooth.";
+            default -> "¿es este el COM saliente y está emparejado el adaptador?";
+        };
+        return "No se pudo abrir " + puerto + " (error " + codigo + "): " + causa;
     }
 
     /** Activa/desactiva el volcado de la conversación cruda por consola. */
