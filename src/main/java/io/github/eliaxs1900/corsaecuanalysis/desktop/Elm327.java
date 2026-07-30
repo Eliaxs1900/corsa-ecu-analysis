@@ -22,9 +22,16 @@ public final class Elm327 implements Transport, AutoCloseable {
 
     private final SerialPort port;
     private volatile boolean traza;
+    private final Thread cierreAlSalir;
 
     private Elm327(SerialPort port) {
         this.port = port;
+        // Si el proceso termina sin pasar por close() (Ctrl+C, cierre de ventana,
+        // excepción no capturada), Windows deja el enlace RFCOMM del adaptador
+        // Bluetooth "pegado" y el puerto queda inutilizable hasta reiniciar el
+        // Bluetooth. Este gancho garantiza que siempre se cierre.
+        this.cierreAlSalir = new Thread(this::cerrarPuerto, "cierre-puerto-serie");
+        Runtime.getRuntime().addShutdownHook(cierreAlSalir);
     }
 
     public static List<String> puertosDisponibles() {
@@ -120,6 +127,17 @@ public final class Elm327 implements Transport, AutoCloseable {
 
     @Override
     public void close() {
-        port.closePort();
+        cerrarPuerto();
+        // Ya no hace falta el gancho de apagado.
+        try {
+            Runtime.getRuntime().removeShutdownHook(cierreAlSalir);
+        } catch (IllegalStateException ignored) {
+            // la JVM ya se está apagando: el propio gancho hará el cierre
+        }
+    }
+
+    /** Cierre idempotente: puede llamarse desde close() y desde el gancho de apagado. */
+    private synchronized void cerrarPuerto() {
+        if (port.isOpen()) port.closePort();
     }
 }
