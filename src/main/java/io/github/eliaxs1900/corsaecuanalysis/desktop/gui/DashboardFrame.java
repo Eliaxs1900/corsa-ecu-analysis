@@ -34,13 +34,14 @@ public class DashboardFrame extends JFrame {
     private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
 
     private final JComboBox<String> portBox = new JComboBox<>();
-    private final JButton connectBtn = new JButton("Conectar");
+    private final JButton connectBtn = new JButton("Conectar con el coche");
     private final JButton recordBtn = new JButton("● Grabar CSV");
     private final JButton dtcBtn = new JButton("Averías");
     private final JButton logsBtn = new JButton("Registros");
     private final JLabel statusLbl = new JLabel("Desconectado");
 
-    private JLabel rpmV, turboV, pedalV, coolV, oilV, battV;
+    private JLabel rpmV, turboV, pedalV, coolV, oilV, battV;          // cifras
+    private JLabel rpmS, turboS, pedalS, coolS, oilS, battS;          // línea de contexto
     private JProgressBar boostBar;
     private JLabel brakeI, clutchI, acI, fullI;
 
@@ -54,15 +55,26 @@ public class DashboardFrame extends JFrame {
     private int recCount;
     private volatile boolean recording;
 
-    public static void launch() {
+    public static void launch() { launch(false); }
+
+    /**
+     * @param automatico si es true, además de mostrar la ventana escucha comandos
+     *                   por la entrada estándar para pilotarla sin manos.
+     */
+    public static void launch(boolean automatico) {
         try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); } catch (Exception ignored) {}
-        SwingUtilities.invokeLater(() -> new DashboardFrame().setVisible(true));
+        SwingUtilities.invokeLater(() -> {
+            DashboardFrame f = new DashboardFrame();
+            f.setVisible(true);
+            if (automatico) f.escucharComandos();
+        });
     }
 
     public DashboardFrame() {
         super("Corsa OBD — Y17DTL · ECU motor · KWP2000");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setSize(760, 500);
+        setSize(900, 560);
+        setMinimumSize(new Dimension(820, 520));
         setLocationRelativeTo(null);
         getContentPane().setBackground(BG);
         setLayout(new BorderLayout(8, 8));
@@ -88,19 +100,34 @@ public class DashboardFrame extends JFrame {
     // ---------- construcción de UI ----------
 
     private JComponent buildTopBar() {
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-        p.setBackground(BG);
+        JPanel col = new JPanel(new GridLayout(2, 1, 0, 2));
+        col.setBackground(BG);
+
+        // Fila 1: la acción principal. Buscar el adaptador solo, como en el móvil.
+        JPanel fila1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
+        fila1.setBackground(BG);
+        connectBtn.setFont(connectBtn.getFont().deriveFont(Font.BOLD));
+        fila1.add(connectBtn);
+        fila1.add(recordBtn); fila1.add(dtcBtn); fila1.add(logsBtn);
+        fila1.add(statusLbl);
+
+        // Fila 2: selección manual del puerto, solo por si hace falta.
+        JPanel fila2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
+        fila2.setBackground(BG);
         JButton refresh = new JButton("↻");
         refresh.addActionListener(e -> refreshPorts());
-        portBox.setPreferredSize(new Dimension(240, 28));
-        for (JComponent c : new JComponent[]{portBox, connectBtn, recordBtn, dtcBtn, logsBtn}) {
+        portBox.setPreferredSize(new Dimension(300, 24));
+        JLabel avanzado = new lbl("Puerto (opcional):");
+        avanzado.setForeground(MUTED);
+        avanzado.setFont(avanzado.getFont().deriveFont(11f));
+        fila2.add(avanzado); fila2.add(portBox); fila2.add(refresh);
+
+        for (JComponent c : new JComponent[]{portBox, connectBtn, recordBtn, dtcBtn, logsBtn, refresh}) {
             c.setFocusable(false);
         }
         statusLbl.setForeground(ACCENT);
-        p.add(new lbl("Puerto:"));
-        p.add(portBox); p.add(refresh); p.add(connectBtn); p.add(recordBtn); p.add(dtcBtn); p.add(logsBtn);
-        p.add(statusLbl);
-        return p;
+        col.add(fila1); col.add(fila2);
+        return col;
     }
 
     private JComponent buildCenter() {
@@ -113,16 +140,18 @@ public class DashboardFrame extends JFrame {
         boostBar.setForeground(ACCENT);
         wrap.add(boostBar, BorderLayout.NORTH);
 
-        JPanel grid = new JPanel(new GridLayout(2, 3, 8, 8));
+        JPanel grid = new JPanel(new GridLayout(2, 3, 10, 10));
         grid.setBackground(BG);
         rpmV = new JLabel("—"); turboV = new JLabel("—"); pedalV = new JLabel("—");
         coolV = new JLabel("—"); oilV = new JLabel("—"); battV = new JLabel("—");
-        grid.add(gauge("RPM", rpmV, "rpm"));
-        grid.add(gauge("Turbo", turboV, "kPa · bar"));
-        grid.add(gauge("Acelerador", pedalV, "%"));
-        grid.add(gauge("Refrigerante", coolV, "°C"));
-        grid.add(gauge("Admisión", oilV, "≈°C estimado"));
-        grid.add(gauge("Batería", battV, "V"));
+        rpmS = new JLabel(); turboS = new JLabel(); pedalS = new JLabel();
+        coolS = new JLabel(); oilS = new JLabel(); battS = new JLabel();
+        grid.add(gauge("RPM", rpmV, rpmS, "rpm"));
+        grid.add(gauge("Turbo", turboV, turboS, "kPa"));
+        grid.add(gauge("Acelerador", pedalV, pedalS, "%"));
+        grid.add(gauge("Refrigerante", coolV, coolS, "°C"));
+        grid.add(gauge("Admisión", oilV, oilS, "°C estimado"));
+        grid.add(gauge("Batería", battV, battS, "voltios"));
         wrap.add(grid, BorderLayout.CENTER);
         return wrap;
     }
@@ -135,17 +164,36 @@ public class DashboardFrame extends JFrame {
         return p;
     }
 
-    private JPanel gauge(String title, JLabel value, String unit) {
+    /**
+     * Tarjeta de métrica al estilo Fluent: título pequeño arriba, cifra grande
+     * y una línea de contexto debajo (unidad y detalle). El contexto va en su
+     * propia etiqueta, no pegado a la cifra: así nunca se corta el texto.
+     */
+    private JPanel gauge(String title, JLabel value, JLabel sub, String unitPorDefecto) {
         JPanel c = new JPanel();
         c.setLayout(new BoxLayout(c, BoxLayout.Y_AXIS));
         c.setBackground(CARD);
-        c.setBorder(BorderFactory.createEmptyBorder(10, 14, 10, 14));
-        JLabel t = new lbl(title); t.setForeground(MUTED);
+        c.setBorder(BorderFactory.createEmptyBorder(8, 14, 8, 14));
+
+        JLabel t = new lbl(title);
+        t.setForeground(MUTED);
+        t.setFont(t.getFont().deriveFont(Font.PLAIN, 12f));
+
         value.setForeground(Color.WHITE);
-        value.setFont(new Font(Font.MONOSPACED, Font.BOLD, 34));
-        JLabel u = new lbl(unit); u.setForeground(MUTED); u.setFont(u.getFont().deriveFont(11f));
-        t.setAlignmentX(LEFT_ALIGNMENT); value.setAlignmentX(LEFT_ALIGNMENT); u.setAlignmentX(LEFT_ALIGNMENT);
-        c.add(t); c.add(value); c.add(u);
+        value.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 30));
+
+        sub.setText(unitPorDefecto);
+        sub.setForeground(MUTED);
+        sub.setFont(sub.getFont().deriveFont(Font.PLAIN, 11f));
+
+        t.setAlignmentX(LEFT_ALIGNMENT);
+        value.setAlignmentX(LEFT_ALIGNMENT);
+        sub.setAlignmentX(LEFT_ALIGNMENT);
+        c.add(t);
+        c.add(Box.createVerticalGlue());
+        c.add(value);
+        c.add(sub);
+        c.add(Box.createVerticalGlue());
         return c;
     }
 
@@ -167,8 +215,10 @@ public class DashboardFrame extends JFrame {
 
     private void refreshPorts() {
         portBox.removeAllItems();
+        // Primera opción: que lo busque la app. Solo hace falta tocar esto si falla.
+        portBox.addItem("(buscar automáticamente)");
         for (String p : Elm327.puertosDisponibles()) portBox.addItem(p);
-        if (portBox.getItemCount() == 0) portBox.addItem("(sin puertos — empareja el V-LINK)");
+        portBox.setSelectedIndex(0);
     }
 
     private void toggleConnect() {
@@ -178,23 +228,32 @@ public class DashboardFrame extends JFrame {
 
     private void connect() {
         Object sel = portBox.getSelectedItem();
-        log("clic en Conectar; selección = " + sel);
-        if (sel == null) return;
-        String port = sel.toString().trim().split("\\s+")[0];   // "COM8  (...)" -> "COM8"
-        if (!port.matches("COM\\d+")) {
-            log("selección no válida: '" + port + "'");
-            status("Selecciona un COM válido", DANGER);
-            return;
-        }
+        // "(buscar automáticamente)" o cualquier cosa que no sea un COM => autodetección
+        String elegido = sel == null ? "" : sel.toString().trim().split("\\s+")[0];
+        final String port = elegido.matches("COM\\d+") ? elegido : null;
+        log("clic en Conectar; puerto = " + (port == null ? "AUTODETECTAR" : port));
         connectBtn.setEnabled(false);
-        status("Conectando a " + port + "…", ACCENT);
+        status(port == null ? "Buscando el adaptador…" : "Conectando a " + port + "…", ACCENT);
         new Thread(() -> {
             try {
-                log("abriendo " + port + "…");
-                Elm327 e = Elm327.abrir(port);
-                e.setTraza(true);                    // vuelca la conversación a consola
-                log("puerto abierto; enviando ATZ");
-                log("ATZ -> " + e.send("ATZ", Elm327.TIMEOUT_INIT_MS));
+                Elm327 e;
+                if (port == null) {
+                    e = Elm327.detectarAdaptador(msg -> {
+                        log(msg);
+                        SwingUtilities.invokeLater(() -> status(msg, ACCENT));
+                    });
+                    if (e == null) {
+                        throw new IOException("No se encontró ningún adaptador. Comprueba que está "
+                                + "enchufado al coche, encendido (pulsa su botón si lo tiene) y emparejado.");
+                    }
+                    e.setTraza(true);
+                } else {
+                    log("abriendo " + port + "…");
+                    e = Elm327.abrir(port);
+                    e.setTraza(true);                    // vuelca la conversación a consola
+                    log("puerto abierto; enviando ATZ");
+                    log("ATZ -> " + e.send("ATZ", Elm327.TIMEOUT_INIT_MS));
+                }
                 e.send("ATE0"); e.send("ATL0");
                 log("iniciando sesión KWP2000 con la ECU 0x11");
                 Kwp k = new Kwp(e);
@@ -233,6 +292,74 @@ public class DashboardFrame extends JFrame {
         System.out.flush();
     }
 
+    // ---------- automatización: pulsar los controles por comando ----------
+
+    /**
+     * Ejecuta una acción de la interfaz **emulando la pulsación real** del control
+     * ({@code doClick()}), no llamando al método por detrás: así se prueba el mismo
+     * camino que sigue el usuario. Pensado para auto-diagnóstico sin manos.
+     *
+     * <p>Comandos: {@code ports}, {@code port COM8}, {@code connect}, {@code rec},
+     * {@code dtc}, {@code logs}, {@code status}, {@code datos}, {@code quit}.
+     */
+    public void ejecutarComando(String linea) {
+        String[] p = linea.trim().split("\\s+", 2);
+        String cmd = p[0].toLowerCase();
+        String arg = p.length > 1 ? p[1].trim() : "";
+        switch (cmd) {
+            case "ports" -> {
+                log("puertos en el desplegable:");
+                for (int i = 0; i < portBox.getItemCount(); i++) log("  [" + i + "] " + portBox.getItemAt(i));
+            }
+            case "port" -> {
+                boolean hallado = false;
+                for (int i = 0; i < portBox.getItemCount(); i++) {
+                    if (portBox.getItemAt(i).startsWith(arg)) {
+                        final int idx = i;
+                        SwingUtilities.invokeLater(() -> portBox.setSelectedIndex(idx));
+                        log("seleccionado " + portBox.getItemAt(i));
+                        hallado = true;
+                        break;
+                    }
+                }
+                if (!hallado) log("no encontrado el puerto '" + arg + "'");
+            }
+            case "connect" -> { log("[auto] clic en Conectar"); SwingUtilities.invokeLater(connectBtn::doClick); }
+            case "rec" -> { log("[auto] clic en Grabar"); SwingUtilities.invokeLater(recordBtn::doClick); }
+            case "dtc" -> { log("[auto] clic en Averías"); SwingUtilities.invokeLater(dtcBtn::doClick); }
+            case "logs" -> { log("[auto] clic en Registros"); SwingUtilities.invokeLater(logsBtn::doClick); }
+            case "status" -> log("estado: " + statusLbl.getText()
+                    + " | conectado=" + connected
+                    + " | botón=" + connectBtn.getText());
+            case "datos" -> log("valores: rpm=" + rpmV.getText() + " turbo=" + turboV.getText()
+                    + " pedal=" + pedalV.getText() + " refrig=" + coolV.getText()
+                    + " admision=" + oilV.getText() + " bateria=" + battV.getText());
+            case "quit" -> { log("[auto] saliendo"); disconnect(); System.exit(0); }
+            default -> log("comando desconocido: '" + cmd + "'");
+        }
+    }
+
+    /**
+     * Lee comandos de la entrada estándar y los ejecuta sobre la interfaz.
+     * Permite pilotar la ventana desde un script mientras se ve en pantalla.
+     */
+    public void escucharComandos() {
+        Thread t = new Thread(() -> {
+            log("modo automático listo (ports | port COMx | connect | rec | dtc | logs | status | datos | quit)");
+            try (java.io.BufferedReader in = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(System.in))) {
+                String linea;
+                while ((linea = in.readLine()) != null) {
+                    if (!linea.isBlank()) ejecutarComando(linea);
+                }
+            } catch (Exception e) {
+                log("fin de la entrada de comandos: " + e.getMessage());
+            }
+        }, "auto-comandos");
+        t.setDaemon(true);
+        t.start();
+    }
+
     private void startPolling() {
         poller = new Thread(() -> {
             long lastTs = System.currentTimeMillis();
@@ -267,11 +394,26 @@ public class DashboardFrame extends JFrame {
         if (poller != null) poller.interrupt();
         closeQuietly();
         SwingUtilities.invokeLater(() -> {
-            connectBtn.setText("Conectar"); connectBtn.setEnabled(true);
+            connectBtn.setText("Conectar con el coche"); connectBtn.setEnabled(true);
             recordBtn.setEnabled(false); dtcBtn.setEnabled(false);
             portBox.setEnabled(true);
+            limpiarValores();     // que no queden datos viejos aparentando estar en vivo
             status("Desconectado", MUTED);
         });
+    }
+
+    /** Deja el cuadro en blanco: los datos de la sesión anterior ya no son válidos. */
+    private void limpiarValores() {
+        for (JLabel v : new JLabel[]{rpmV, turboV, pedalV, coolV, oilV, battV}) {
+            v.setText("—");
+            v.setForeground(Color.WHITE);
+        }
+        rpmS.setText("rpm"); turboS.setText("kPa"); pedalS.setText("%");
+        coolS.setText("°C"); oilS.setText("°C estimado"); battS.setText("voltios");
+        boostBar.setValue(0);
+        boostBar.setString("Turbo");
+        setPill(brakeI, false); setPill(clutchI, false);
+        setPill(acI, false); setPill(fullI, false);
     }
 
     private void closeQuietly() {
@@ -284,14 +426,27 @@ public class DashboardFrame extends JFrame {
     private void update(LiveDecoder.Live l, double hz) {
         boolean pw = l.ecuPowered();            // llave en 2 o motor en marcha => datos válidos
         boolean map = pw && l.boostKpa() > 0;   // el MAP solo se refresca girando el motor
+        // Cifra grande + línea de contexto aparte (nunca se corta el texto).
         rpmV.setText(pw ? Integer.toString(l.rpm()) : "—");
         rpmV.setForeground(l.rpm() >= 4500 ? DANGER : l.rpm() >= 3000 ? WARN : Color.WHITE);
-        turboV.setText(map ? l.boostKpa() + "  " + String.format("%+.2f", l.boostBar()) : "—");
-        oilV.setText(pw ? "≈" + l.intakeApproxC() + "  (" + l.intakeRaw() + ")" : "—");
-        pedalV.setText(Integer.toString(l.pedalPct()));
-        coolV.setText(l.coolantC() + "  (obj " + l.coolantTargetC() + ")");
+        rpmS.setText(pw ? (l.rpm() == 0 ? "rpm · motor parado" : "rpm") : "sin alimentación");
+
+        turboV.setText(map ? Integer.toString(l.boostKpa()) : "—");
+        turboS.setText(map ? String.format("kPa · %+.2f bar", l.boostBar())
+                : (pw ? "motor parado" : "sin alimentación"));
+
+        pedalV.setText(pw ? Integer.toString(l.pedalPct()) : "—");
+        pedalS.setText(pw ? "%" : "sin alimentación");
+
+        coolV.setText(pw ? Integer.toString(l.coolantC()) : "—");
         coolV.setForeground(l.coolantC() >= 105 ? DANGER : l.coolantC() < 60 ? COLD : OK);
+        coolS.setText(pw ? "°C · objetivo " + l.coolantTargetC() + " °C" : "sin alimentación");
+
+        oilV.setText(pw ? "≈" + l.intakeApproxC() : "—");
+        oilS.setText(pw ? "°C estimado · lectura " + l.intakeRaw() : "sin alimentación");
+
         battV.setText(String.format("%.1f", l.voltage()));
+        battS.setText(l.voltage() > 13 ? "voltios · cargando" : "voltios");
 
         int pct = map ? (int) Math.max(0, Math.min(120, l.boostBar() * 100)) : 0;
         boostBar.setValue(pct);

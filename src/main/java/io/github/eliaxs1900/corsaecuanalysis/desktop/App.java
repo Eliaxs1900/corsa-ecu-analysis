@@ -10,6 +10,7 @@ import org.jline.terminal.TerminalBuilder;
 import java.io.IOException;
 import io.github.eliaxs1900.corsaecuanalysis.core.Kwp;
 import io.github.eliaxs1900.corsaecuanalysis.core.DtcCatalog;
+import io.github.eliaxs1900.corsaecuanalysis.core.LiveDecoder;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -28,11 +29,153 @@ public final class App {
 
     public static void main(String[] args) throws Exception {
         prepararDllNativa();
-        // Por defecto abre la interfaz gráfica; 'console [COMx]' usa la consola de texto.
-        if (args.length > 0 && args[0].equalsIgnoreCase("console")) {
-            new App().ejecutar(args.length > 1 ? args[1] : null);
+
+        java.util.Set<String> flags = new java.util.HashSet<>();
+        String puerto = null;
+        int muestras = 5;
+        for (int i = 0; i < args.length; i++) {
+            String a = args[i].toLowerCase();
+            switch (a) {
+                case "--port", "-p" -> { if (i + 1 < args.length) puerto = args[++i]; }
+                case "--samples", "-n" -> {
+                    if (i + 1 < args.length) try { muestras = Integer.parseInt(args[++i]); } catch (NumberFormatException ignored) { }
+                }
+                default -> {
+                    if (a.startsWith("-")) flags.add(a);
+                    else if (a.matches("com\\d+")) puerto = args[i];       // atajo: "COM7" suelto
+                    else if (a.equals("console")) flags.add("--console");  // compatibilidad
+                }
+            }
+        }
+
+        if (flags.contains("--help") || flags.contains("-h")) { ayuda(); return; }
+
+        boolean debug = flags.contains("--debug") || flags.contains("-d");
+
+        // Modos sin interfaz: sacan datos y salen (para diagnóstico y automatización).
+        if (flags.contains("--dump")) { new App().volcar(puerto, muestras, debug, false); return; }
+        if (flags.contains("--raw")) { new App().volcar(puerto, muestras, debug, true); return; }
+        if (flags.contains("--dtc")) { new App().volcarDtc(puerto, debug); return; }
+        if (flags.contains("--scan")) { new App().escanearPuertos(); return; }
+
+        // Consola interactiva
+        if (flags.contains("--console") || flags.contains("--only-terminal") || flags.contains("-c")) {
+            new App().ejecutar(puerto);
+            return;
+        }
+
+        // Interfaz gráfica (por defecto); con --auto acepta comandos por stdin.
+        io.github.eliaxs1900.corsaecuanalysis.desktop.gui.DashboardFrame.launch(flags.contains("--auto"));
+    }
+
+    private static void ayuda() {
+        System.out.println("""
+                corsa-ecu-analysis — diagnóstico de la ECU de un Opel Corsa C 1.7 DI (Y17DTL)
+
+                Uso: java -jar corsa-ecu-analysis.jar [opciones]
+
+                MODOS
+                  (sin opciones)     Interfaz gráfica (por defecto)
+                  --auto             Interfaz gráfica pilotable por comandos desde la entrada estándar
+                  --console, -c      Consola de texto interactiva  (alias: --only-terminal)
+                  --dump             Conecta, imprime N muestras ya descodificadas y sale
+                  --raw              Igual que --dump pero en hexadecimal crudo
+                  --dtc              Lee las averías de la ECU y sale
+                  --scan             Lista los puertos y busca en cuál responde el adaptador
+
+                OPCIONES
+                  --port COMx, -p    Fuerza el puerto (por defecto: se detecta solo)
+                  --samples N, -n    Nº de muestras para --dump/--raw (por defecto 5)
+                  --debug, -d        Vuelca toda la conversación con el adaptador
+                  --help, -h         Esta ayuda
+
+                EJEMPLOS
+                  java -jar corsa-ecu-analysis.jar --dump -n 20 --debug
+                  java -jar corsa-ecu-analysis.jar --dtc
+                  java -jar corsa-ecu-analysis.jar --console COM7
+                """);
+    }
+
+    /** Abre el adaptador: por el puerto indicado o buscándolo automáticamente. */
+    private Elm327 abrirAdaptador(String puerto, boolean debug) throws IOException {
+        Elm327 e;
+        if (puerto != null) {
+            System.out.println("Abriendo " + puerto + "…");
+            e = Elm327.abrir(puerto);
+            e.setTraza(debug);
+            System.out.println("Adaptador: " + e.send("ATZ", Elm327.TIMEOUT_INIT_MS).replace('\n', ' '));
         } else {
-            io.github.eliaxs1900.corsaecuanalysis.desktop.gui.DashboardFrame.launch();
+            e = Elm327.detectarAdaptador(System.out::println);
+            if (e == null) throw new IOException("No se encontró ningún adaptador. "
+                    + "Comprueba que está enchufado al coche, encendido y emparejado.");
+            e.setTraza(debug);
+        }
+        e.send("ATE0");
+        e.send("ATL0");
+        return e;
+    }
+
+    /** Modo --dump/--raw: conecta, imprime muestras del bloque de datos y sale. */
+    private void volcar(String puerto, int muestras, boolean debug, boolean crudo) {
+        try (Elm327 e = abrirAdaptador(puerto, debug)) {
+            System.out.println("Tensión del adaptador: " + e.send("ATRV").replace('\n', ' '));
+            Kwp k = new Kwp(e);
+            k.init();
+            System.out.println("Sesión KWP2000 iniciada con la ECU del motor (0x11)");
+            try { System.out.println("VIN: " + k.identificacion(0x90)); } catch (IOException ex) { }
+            for (int i = 0; i < muestras; i++) {
+                List<Integer> b = k.datosLocales(0x01);
+                List<Integer> datos = b.subList(2, b.size());
+                if (crudo) {
+                    System.out.printf("[%d] %s%n", i + 1, hex(datos));
+                } else {
+                    LiveDecoder.Live l = LiveDecoder.decode(datos);
+                    if (l == null) { System.out.println("(bloque corto)"); continue; }
+                    System.out.printf("[%d] rpm=%-5d refrig=%d°C (obj %d) turbo=%s bateria=%.1fV "
+                                    + "pedal=%d%% admision=~%d°C %s%n",
+                            i + 1, l.rpm(), l.coolantC(), l.coolantTargetC(),
+                            l.boostKpa() > 0 ? l.boostKpa() + "kPa" : "—",
+                            l.voltage(), l.pedalPct(), l.intakeApproxC(),
+                            l.ecuPowered() ? "" : "[ECU SIN ALIMENTACION]");
+                }
+                Thread.sleep(300);
+            }
+        } catch (Exception ex) {
+            System.out.println("ERROR: " + ex.getMessage());
+        }
+    }
+
+    /** Modo --dtc: lee y descodifica las averías. */
+    private void volcarDtc(String puerto, boolean debug) {
+        try (Elm327 e = abrirAdaptador(puerto, debug)) {
+            Kwp k = new Kwp(e);
+            k.init();
+            List<Kwp.Dtc> lista = k.leerDtc();
+            if (lista.isEmpty()) {
+                System.out.println("La ECU del motor no tiene averías almacenadas.");
+            } else {
+                System.out.println(lista.size() + " avería(s):");
+                for (Kwp.Dtc d : lista) {
+                    System.out.printf("  %s  %s%s%n", d.codigo(), DtcCatalog.describe(d.codigo()),
+                            d.activo() ? "  [ACTIVO]" : "");
+                }
+            }
+        } catch (Exception ex) {
+            System.out.println("ERROR: " + ex.getMessage());
+        }
+    }
+
+    /** Modo --scan: lista los puertos e indica en cuál responde el adaptador. */
+    private void escanearPuertos() {
+        System.out.println("Puertos disponibles:");
+        for (String p : Elm327.puertosDisponibles()) System.out.println("  " + p);
+        System.out.println("\nBuscando el adaptador…");
+        Elm327 e = Elm327.detectarAdaptador(System.out::println);
+        if (e == null) System.out.println("No respondió ningún adaptador.");
+        else {
+            try { System.out.println("Tensión: " + e.send("ATRV").replace('\n', ' ')); }
+            catch (IOException ignored) { }
+            e.close();
         }
     }
 

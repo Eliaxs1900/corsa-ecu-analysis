@@ -34,6 +34,36 @@ public final class Elm327 implements Transport, AutoCloseable {
         Runtime.getRuntime().addShutdownHook(cierreAlSalir);
     }
 
+    /**
+     * Busca el adaptador probando los puertos serie: abre cada uno y le pregunta
+     * quién es ({@code ATZ}); el que conteste "ELM" es el bueno.
+     *
+     * <p>Evita que el usuario tenga que saber cuál de los dos puertos COM que crea
+     * Windows es el saliente (el otro es de escucha y nunca responde).
+     *
+     * @param aviso  recibe mensajes de progreso (puede ser null)
+     * @return el adaptador ya abierto y listo, o null si ninguno respondió
+     */
+    public static Elm327 detectarAdaptador(java.util.function.Consumer<String> aviso) {
+        for (SerialPort sp : SerialPort.getCommPorts()) {
+            String nombre = sp.getSystemPortName();
+            if (aviso != null) aviso.accept("Probando " + nombre + "…");
+            Elm327 e = null;
+            try {
+                e = abrir(nombre);
+                String id = e.send("ATZ", 6_000);       // timeout corto: solo es un sondeo
+                if (id != null && id.toUpperCase().contains("ELM")) {
+                    if (aviso != null) aviso.accept("Adaptador encontrado en " + nombre + ": " + id.replace('\n', ' '));
+                    return e;
+                }
+                e.close();
+            } catch (Exception ignorada) {
+                if (e != null) try { e.close(); } catch (Exception ignorada2) { }
+            }
+        }
+        return null;
+    }
+
     public static List<String> puertosDisponibles() {
         List<String> out = new ArrayList<>();
         for (SerialPort p : SerialPort.getCommPorts()) {
