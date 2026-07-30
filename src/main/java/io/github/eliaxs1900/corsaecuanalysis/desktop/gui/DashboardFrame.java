@@ -551,67 +551,184 @@ public class DashboardFrame extends JFrame {
 
     // ---------- gestión de registros (consultar / exportar / eliminar) ----------
 
+    /**
+     * Ventana de registros: lista a la izquierda, detalle a la derecha y acciones
+     * abajo. Redimensionable y con el mismo tema oscuro que el resto de la app.
+     */
     private void showLogs() {
         java.io.File dir = new java.io.File("logs");
-        java.io.File[] files = dir.listFiles((d, n) -> n.endsWith(".csv"));
-        if (files == null || files.length == 0) {
-            JOptionPane.showMessageDialog(this,
-                    "Todavía no hay registros.\nPulsa «Grabar CSV» durante una sesión en vivo.",
-                    "Registros", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        java.util.Arrays.sort(files, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
 
-        DefaultListModel<String> modelo = new DefaultListModel<>();
-        java.time.format.DateTimeFormatter df = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
-        for (java.io.File f : files) {
-            String fecha = java.time.LocalDateTime.ofInstant(
-                    java.time.Instant.ofEpochMilli(f.lastModified()), java.time.ZoneId.systemDefault()).format(df);
-            modelo.addElement(String.format("%s   (%.1f KB · %s)", f.getName(), f.length() / 1024.0, fecha));
-        }
-        JList<String> lista = new JList<>(modelo);
+        JDialog d = new JDialog(this, "Registros guardados", true);
+        d.getContentPane().setBackground(BG);
+        d.setLayout(new BorderLayout(10, 10));
+        ((JComponent) d.getContentPane()).setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+        DefaultListModel<java.io.File> modelo = new DefaultListModel<>();
+        JList<java.io.File> lista = new JList<>(modelo);
         lista.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        lista.setSelectedIndex(0);
+        lista.setBackground(CARD);
+        lista.setForeground(Color.WHITE);
+        lista.setFixedCellHeight(46);
+        lista.setCellRenderer(new FichaRegistro());
 
-        JTextArea resumen = new JTextArea(9, 44);
-        resumen.setEditable(false);
-        resumen.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        // Panel de detalle: campos con formato, no texto plano
+        JPanel detalle = new JPanel();
+        detalle.setLayout(new BoxLayout(detalle, BoxLayout.Y_AXIS));
+        detalle.setBackground(CARD);
+        detalle.setBorder(BorderFactory.createEmptyBorder(14, 16, 14, 16));
+
+        JLabel tituloDet = new lbl("Selecciona un registro");
+        tituloDet.setFont(tituloDet.getFont().deriveFont(Font.BOLD, 13f));
+        JLabel[] campos = new JLabel[6];
+        detalle.add(tituloDet);
+        detalle.add(Box.createVerticalStrut(10));
+        for (int i = 0; i < campos.length; i++) {
+            campos[i] = new lbl(" ");
+            campos[i].setForeground(MUTED);
+            campos[i].setAlignmentX(LEFT_ALIGNMENT);
+            detalle.add(campos[i]);
+            detalle.add(Box.createVerticalStrut(4));
+        }
+        tituloDet.setAlignmentX(LEFT_ALIGNMENT);
+        detalle.add(Box.createVerticalGlue());
+
+        JScrollPane scrollLista = new JScrollPane(lista);
+        scrollLista.setBorder(BorderFactory.createEmptyBorder());
+        scrollLista.getViewport().setBackground(CARD);
+
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, scrollLista, detalle);
+        split.setDividerLocation(320);
+        split.setBorder(BorderFactory.createEmptyBorder());
+        split.setBackground(BG);
+        d.add(split, BorderLayout.CENTER);
+
+        JLabel resumenTotal = new lbl(" ");
+        resumenTotal.setForeground(MUTED);
+        d.add(resumenTotal, BorderLayout.NORTH);
+
+        // --- acciones ---
+        JButton abrir = new JButton("Abrir carpeta");
+        JButton exportar = new JButton("Exportar…");
+        JButton borrar = new JButton("Eliminar");
+        JButton borrarTodos = new JButton("Eliminar todos");
+        JButton cerrar = new JButton("Cerrar");
+        JPanel acciones = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 4));
+        acciones.setBackground(BG);
+        acciones.add(abrir); acciones.add(exportar); acciones.add(borrar);
+        acciones.add(borrarTodos); acciones.add(cerrar);
+        d.add(acciones, BorderLayout.SOUTH);
+
+        Runnable recargar = () -> {
+            modelo.clear();
+            java.io.File[] fs = dir.listFiles((p, n) -> n.endsWith(".csv"));
+            if (fs != null) {
+                java.util.Arrays.sort(fs, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                long total = 0;
+                for (java.io.File f : fs) { modelo.addElement(f); total += f.length(); }
+                resumenTotal.setText(String.format("%d registro(s) · %.1f KB en total", fs.length, total / 1024.0));
+            } else {
+                resumenTotal.setText("No hay registros todavía. Pulsa «Grabar CSV» durante una sesión en vivo.");
+            }
+            boolean hay = modelo.size() > 0;
+            for (JButton b : new JButton[]{exportar, borrar, borrarTodos}) b.setEnabled(hay);
+            if (hay) lista.setSelectedIndex(0);
+            else { tituloDet.setText("Sin registros"); for (JLabel c : campos) c.setText(" "); }
+        };
+
         lista.addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting() && lista.getSelectedIndex() >= 0) {
-                resumen.setText(resumirCsv(files[lista.getSelectedIndex()]));
-                resumen.setCaretPosition(0);
+            if (e.getValueIsAdjusting() || lista.getSelectedValue() == null) return;
+            java.io.File f = lista.getSelectedValue();
+            tituloDet.setText(f.getName());
+            for (JLabel c : campos) c.setText("  analizando…");
+            new Thread(() -> {
+                String[] datos = resumirCsv(f);
+                SwingUtilities.invokeLater(() -> {
+                    for (int i = 0; i < campos.length; i++) {
+                        campos[i].setText(i < datos.length ? datos[i] : " ");
+                    }
+                });
+            }, "resumen-csv").start();
+        });
+
+        abrir.addActionListener(e -> {
+            try { Desktop.getDesktop().open(dir.getAbsoluteFile()); }
+            catch (Exception ex) { JOptionPane.showMessageDialog(d, "No se pudo abrir la carpeta: " + ex.getMessage()); }
+        });
+        exportar.addActionListener(e -> {
+            java.io.File f = lista.getSelectedValue();
+            if (f == null) return;
+            JFileChooser fc = new JFileChooser();
+            fc.setSelectedFile(new java.io.File(f.getName()));
+            fc.setDialogTitle("Exportar registro");
+            if (fc.showSaveDialog(d) == JFileChooser.APPROVE_OPTION) {
+                try {
+                    Files.copy(f.toPath(), fc.getSelectedFile().toPath(),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    JOptionPane.showMessageDialog(d, "Exportado a:\n" + fc.getSelectedFile().getAbsolutePath());
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(d, "No se pudo exportar: " + ex.getMessage());
+                }
             }
         });
-        resumen.setText(resumirCsv(files[0]));
-
-        JPanel panel = new JPanel(new BorderLayout(8, 8));
-        panel.add(new JScrollPane(lista), BorderLayout.NORTH);
-        panel.add(new JScrollPane(resumen), BorderLayout.CENTER);
-
-        Object[] opciones = {"Abrir carpeta", "Eliminar", "Cerrar"};
-        int r = JOptionPane.showOptionDialog(this, panel, "Registros guardados",
-                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, opciones, "Cerrar");
-        int sel = lista.getSelectedIndex();
-        if (r == 0) {                                   // exportar = abrir la carpeta del CSV
-            try {
-                Desktop.getDesktop().open(dir.getAbsoluteFile());
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "No se pudo abrir la carpeta: " + ex.getMessage());
-            }
-        } else if (r == 1 && sel >= 0) {
-            java.io.File f = files[sel];
-            int c = JOptionPane.showConfirmDialog(this,
-                    "¿Eliminar «" + f.getName() + "»?\nEsta acción no se puede deshacer.",
+        borrar.addActionListener(e -> {
+            java.io.File f = lista.getSelectedValue();
+            if (f == null) return;
+            int c = JOptionPane.showConfirmDialog(d,
+                    "¿Eliminar «" + f.getName() + "»?\nExpórtalo antes si quieres conservarlo.",
+                    "Confirmar borrado", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (c == JOptionPane.YES_OPTION) { f.delete(); recargar.run(); }
+        });
+        borrarTodos.addActionListener(e -> {
+            int c = JOptionPane.showConfirmDialog(d,
+                    "¿Eliminar los " + modelo.size() + " registros?\nEsta acción no se puede deshacer.",
                     "Confirmar borrado", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
             if (c == JOptionPane.YES_OPTION) {
-                boolean ok = f.delete();
-                JOptionPane.showMessageDialog(this, ok ? "Registro eliminado." : "No se pudo eliminar.");
+                for (int i = 0; i < modelo.size(); i++) modelo.get(i).delete();
+                recargar.run();
             }
+        });
+        cerrar.addActionListener(e -> d.dispose());
+
+        recargar.run();
+        d.setSize(860, 480);
+        d.setMinimumSize(new Dimension(720, 400));
+        d.setLocationRelativeTo(this);
+        d.setVisible(true);
+    }
+
+    /** Dibuja cada registro con su nombre y, debajo, tamaño y fecha en tono suave. */
+    private class FichaRegistro extends JPanel implements ListCellRenderer<java.io.File> {
+        private final JLabel nombre = new JLabel();
+        private final JLabel meta = new JLabel();
+        private final java.time.format.DateTimeFormatter df =
+                java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+
+        FichaRegistro() {
+            setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+            setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+            nombre.setFont(nombre.getFont().deriveFont(Font.BOLD, 12f));
+            meta.setFont(meta.getFont().deriveFont(Font.PLAIN, 11f));
+            nombre.setAlignmentX(LEFT_ALIGNMENT); meta.setAlignmentX(LEFT_ALIGNMENT);
+            add(nombre); add(meta);
+        }
+
+        @Override
+        public Component getListCellRendererComponent(JList<? extends java.io.File> l, java.io.File f,
+                                                      int i, boolean sel, boolean foco) {
+            nombre.setText(f.getName());
+            String fecha = java.time.LocalDateTime.ofInstant(
+                    java.time.Instant.ofEpochMilli(f.lastModified()), java.time.ZoneId.systemDefault()).format(df);
+            meta.setText(String.format("%.1f KB · %s", f.length() / 1024.0, fecha));
+            setBackground(sel ? ACCENT.darker() : CARD);
+            nombre.setForeground(sel ? Color.WHITE : Color.WHITE);
+            meta.setForeground(sel ? Color.WHITE : MUTED);
+            setOpaque(true);
+            return this;
         }
     }
 
-    /** Lee un CSV grabado y devuelve un resumen legible (muestras, duración y rangos). */
-    private String resumirCsv(java.io.File f) {
+    /** Lee un CSV grabado y devuelve sus datos ya formateados, una línea por campo. */
+    private String[] resumirCsv(java.io.File f) {
         int muestras = 0, errores = 0;
         long t0 = 0, t1 = 0;
         int rpmMin = Integer.MAX_VALUE, rpmMax = Integer.MIN_VALUE;
@@ -649,18 +766,19 @@ public class DashboardFrame extends JFrame {
                 }
             }
         } catch (Exception ex) {
-            return "No se pudo leer: " + ex.getMessage();
+            return new String[]{"  No se pudo leer: " + ex.getMessage()};
         }
-        StringBuilder sb = new StringBuilder();
-        sb.append(f.getName()).append('\n')
-          .append(String.format("%d muestras · %d s%s%n", muestras, (t1 - t0) / 1000,
-                  errores > 0 ? " · " + errores + " errores" : ""));
-        if (rpmMin <= rpmMax) sb.append(String.format("RPM           %d – %d%n", rpmMin, rpmMax));
-        if (refMin <= refMax) sb.append(String.format("Refrigerante  %d – %d °C%n", refMin, refMax));
-        if (turMin <= turMax) sb.append(String.format("Turbo         %d – %d kPa%n", turMin, turMax));
-        if (pedMin <= pedMax) sb.append(String.format("Acelerador    %d – %d %%%n", pedMin, pedMax));
-        sb.append("\nRuta: ").append(f.getAbsolutePath());
-        return sb.toString();
+        long seg = (t1 - t0) / 1000;
+        String duracion = seg >= 60 ? String.format("%d min %d s", seg / 60, seg % 60) : seg + " s";
+        return new String[]{
+                String.format("  %,d muestras   ·   %s%s", muestras, duracion,
+                        errores > 0 ? "   ·   " + errores + " errores" : ""),
+                rpmMin <= rpmMax ? String.format("  Régimen          %,d – %,d rpm", rpmMin, rpmMax) : " ",
+                refMin <= refMax ? String.format("  Refrigerante     %d – %d °C", refMin, refMax) : " ",
+                turMin <= turMax ? String.format("  Turbo            %d – %d kPa", turMin, turMax) : " ",
+                pedMin <= pedMax ? String.format("  Acelerador       %d – %d %%", pedMin, pedMax) : " ",
+                "  " + f.getParent(),
+        };
     }
 
     private static void sleep(long ms) {
