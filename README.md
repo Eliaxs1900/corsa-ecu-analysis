@@ -42,17 +42,39 @@ mvn -q package
 java -jar target/corsa-ecu-analysis.jar
 ```
 
-Al ejecutar el jar se abre la **interfaz gráfica** (Swing): elige el puerto COM,
-pulsa **Conectar** y verás el cuadro de mandos en vivo (rpm, turbo con barra,
-acelerador, refrigerante, admisión, batería e interruptores), igual que la app
-Android. Incluye:
+Al ejecutar el jar se abre la **interfaz gráfica** (Swing). Pulsa **«Conectar con
+el coche»** y listo: la app **busca el adaptador sola** (prueba cada puerto serie
+y se queda con el que responda `ELM327`), así que no hay que saber cuál de los dos
+puertos COM que crea Windows es el saliente — que además cambian al re-emparejar.
+
+Verás el cuadro de mandos en vivo (rpm, turbo con barra, acelerador, refrigerante,
+admisión, batería e interruptores), igual que la app Android. Incluye:
 
 - **Grabar CSV** — telemetría con la trama KWP íntegra (cabecera + checksum).
 - **Averías** — lee y decodifica los DTC, con descripciones, y permite borrarlos.
 - **Registros** — consultar el resumen de cada CSV grabado, abrir su carpeta para
   exportarlo y eliminarlo.
 
-Para la consola de texto de siempre: `java -jar target/corsa-ecu-analysis.jar console [COMx]`.
+### Modos de línea de comandos
+
+Para sacar datos sin abrir la interfaz (diagnóstico y automatización):
+
+| Opción | Qué hace |
+|---|---|
+| `--dump` | Conecta e imprime N muestras ya descodificadas |
+| `--raw` | Igual, pero en hexadecimal crudo |
+| `--dtc` | Lee las averías de la ECU y sale |
+| `--scan` | Lista los puertos y localiza el adaptador |
+| `--console`, `-c` | Consola de texto interactiva (alias `--only-terminal`) |
+| `--auto` | Interfaz gráfica pilotable por comandos desde la entrada estándar |
+| `--debug`, `-d` | Vuelca toda la conversación con el adaptador |
+| `--port COMx`, `--samples N` | Fuerza el puerto / nº de muestras |
+| `--help`, `-h` | Ayuda completa |
+
+```
+java -jar corsa-ecu-analysis.jar --dump -n 20 --debug
+java -jar corsa-ecu-analysis.jar --dtc
+```
 
 ## Comandos de la consola
 
