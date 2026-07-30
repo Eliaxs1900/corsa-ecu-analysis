@@ -63,9 +63,12 @@ public final class Elm327 implements Transport, AutoCloseable {
      */
     private static String explicarFallo(String puerto, int codigo) {
         String causa = switch (codigo) {
-            case 5 -> "el puerto está ocupado. El adaptador solo admite una conexión a la vez: "
-                    + "cierra la app del móvil (o desconéctala) y reintenta. "
-                    + "Si sigue igual, desenchufa el adaptador del coche unos segundos.";
+            case 5 -> "acceso denegado. O bien el adaptador ya está conectado a otro equipo "
+                    + "(solo admite uno a la vez), o Windows tiene un enlace Bluetooth colgado. "
+                    + "Cierra la app del móvil; si sigue igual, apaga y enciende el Bluetooth de Windows.";
+            case 121 -> "el adaptador no responde (tiempo de espera agotado). Suele ser por "
+                    + "DISTANCIA: acércate al coche. Comprueba también que el adaptador está "
+                    + "enchufado al conector OBD y con su LED encendido.";
             case 2, 1167 -> "el adaptador no está accesible. Comprueba que está enchufado al "
                     + "conector OBD y dentro del alcance del Bluetooth.";
             default -> "¿es este el COM saliente y está emparejado el adaptador?";

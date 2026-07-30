@@ -178,22 +178,33 @@ public class DashboardFrame extends JFrame {
 
     private void connect() {
         Object sel = portBox.getSelectedItem();
+        log("clic en Conectar; selección = " + sel);
         if (sel == null) return;
         String port = sel.toString().trim().split("\\s+")[0];   // "COM8  (...)" -> "COM8"
-        if (!port.matches("COM\\d+")) { status("Selecciona un COM válido", DANGER); return; }
+        if (!port.matches("COM\\d+")) {
+            log("selección no válida: '" + port + "'");
+            status("Selecciona un COM válido", DANGER);
+            return;
+        }
         connectBtn.setEnabled(false);
         status("Conectando a " + port + "…", ACCENT);
         new Thread(() -> {
             try {
+                log("abriendo " + port + "…");
                 Elm327 e = Elm327.abrir(port);
-                e.send("ATZ", Elm327.TIMEOUT_INIT_MS);
+                e.setTraza(true);                    // vuelca la conversación a consola
+                log("puerto abierto; enviando ATZ");
+                log("ATZ -> " + e.send("ATZ", Elm327.TIMEOUT_INIT_MS));
                 e.send("ATE0"); e.send("ATL0");
+                log("iniciando sesión KWP2000 con la ECU 0x11");
                 Kwp k = new Kwp(e);
                 k.init();
+                log("init KWP OK");
                 String vin;
-                try { vin = k.identificacion(0x90); } catch (IOException ex) { vin = null; }
+                try { vin = k.identificacion(0x90); } catch (IOException ex) { vin = null; log("VIN falló: " + ex.getMessage()); }
                 int dtcCount;
-                try { dtcCount = k.leerDtc().size(); } catch (IOException ex) { dtcCount = -1; }
+                try { dtcCount = k.leerDtc().size(); } catch (IOException ex) { dtcCount = -1; log("DTC falló: " + ex.getMessage()); }
+                log("VIN=" + vin + " DTCs=" + dtcCount);
                 this.elm = e; this.kwp = k; this.connected = true;
                 final String fvin = vin; final int fdtc = dtcCount;
                 SwingUtilities.invokeLater(() -> {
@@ -205,6 +216,8 @@ public class DashboardFrame extends JFrame {
                 });
                 startPolling();
             } catch (Throwable t) {
+                log("FALLO: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+                t.printStackTrace(System.out);
                 SwingUtilities.invokeLater(() -> {
                     connectBtn.setEnabled(true);
                     status("Error: " + t.getMessage(), DANGER);
@@ -212,6 +225,12 @@ public class DashboardFrame extends JFrame {
                 closeQuietly();
             }
         }, "conectar").start();
+    }
+
+    /** Traza con marca de tiempo a la consola (para diagnóstico). */
+    private static void log(String msg) {
+        System.out.println("[" + LocalTime.now().format(HORA) + "] " + msg);
+        System.out.flush();
     }
 
     private void startPolling() {

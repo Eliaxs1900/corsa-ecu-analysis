@@ -1,0 +1,7 @@
+[17:23:01.922] clic en Conectar; selección = COM8  (Serie estándar sobre el vínculo Bluetooth (COM8))
+[17:23:01.939] abriendo COM8…
+[17:23:02.374] FALLO: IOException: No se pudo abrir COM8 (error 5): el puerto está ocupado. El adaptador solo admite una conexión a la vez: cierra la app del móvil (o desconéctala) y reintenta. Si sigue igual, desenchufa el adaptador del coche unos segundos.
+java.io.IOException: No se pudo abrir COM8 (error 5): el puerto está ocupado. El adaptador solo admite una conexión a la vez: cierra la app del móvil (o desconéctala) y reintenta. Si sigue igual, desenchufa el adaptador del coche unos segundos.
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.Elm327.abrir(Elm327.java:53)
+	at io.github.eliaxs1900.corsaecuanalysis.desktop.gui.DashboardFrame.lambda$connect$0(DashboardFrame.java:194)
+	at java.base/java.lang.Thread.run(Thread.java:1516)
